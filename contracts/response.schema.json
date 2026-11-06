@@ -1,0 +1,302 @@
+{
+  "$defs": {
+    "Plan": {
+      "additionalProperties": false,
+      "properties": {
+        "planType": {
+          "enum": [
+            "quick_start",
+            "advanced"
+          ],
+          "title": "Plantype",
+          "type": "string"
+        },
+        "suggestions": {
+          "items": {
+            "$ref": "#/$defs/Task"
+          },
+          "maxItems": 5,
+          "title": "Suggestions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "planType",
+        "suggestions"
+      ],
+      "title": "Plan",
+      "type": "object"
+    },
+    "Progress": {
+      "additionalProperties": false,
+      "properties": {
+        "startValue": {
+          "title": "Startvalue",
+          "type": "number"
+        },
+        "targetValue": {
+          "title": "Targetvalue",
+          "type": "number"
+        },
+        "dailyTarget": {
+          "minimum": 0,
+          "title": "Dailytarget",
+          "type": "number"
+        },
+        "unit": {
+          "maxLength": 12,
+          "title": "Unit",
+          "type": "string"
+        },
+        "calculationType": {
+          "enum": [
+            "add_up",
+            "update"
+          ],
+          "title": "Calculationtype",
+          "type": "string"
+        },
+        "resetCycle": {
+          "enum": [
+            "none",
+            "daily",
+            "weekly",
+            "monthly"
+          ],
+          "title": "Resetcycle",
+          "type": "string"
+        }
+      },
+      "required": [
+        "startValue",
+        "targetValue",
+        "dailyTarget",
+        "unit",
+        "calculationType",
+        "resetCycle"
+      ],
+      "title": "Progress",
+      "type": "object"
+    },
+    "Recurrence": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "none",
+            "daily",
+            "workdays",
+            "weekends",
+            "selected_weekdays",
+            "selected_month_days",
+            "interval",
+            "ebbinghaus"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "weekdays": {
+          "items": {
+            "enum": [
+              "monday",
+              "tuesday",
+              "wednesday",
+              "thursday",
+              "friday",
+              "saturday",
+              "sunday"
+            ],
+            "type": "string"
+          },
+          "title": "Weekdays",
+          "type": "array"
+        },
+        "monthDays": {
+          "items": {
+            "maximum": 31,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "title": "Monthdays",
+          "type": "array"
+        },
+        "includeLastDayOfMonth": {
+          "title": "Includelastdayofmonth",
+          "type": "boolean"
+        },
+        "interval": {
+          "anyOf": [
+            {
+              "maximum": 366,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Interval"
+        },
+        "intervalUnit": {
+          "anyOf": [
+            {
+              "enum": [
+                "day",
+                "week"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Intervalunit"
+        }
+      },
+      "required": [
+        "type",
+        "weekdays",
+        "monthDays",
+        "includeLastDayOfMonth",
+        "interval",
+        "intervalUnit"
+      ],
+      "title": "Recurrence",
+      "type": "object"
+    },
+    "Task": {
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 10000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "datePolicy": {
+          "enum": [
+            "none",
+            "goal_range_if_available",
+            "explicit"
+          ],
+          "title": "Datepolicy",
+          "type": "string"
+        },
+        "startDate": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Startdate"
+        },
+        "endDate": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Enddate"
+        },
+        "taskSpec": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TaskSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "title",
+        "datePolicy"
+      ],
+      "title": "Task",
+      "type": "object"
+    },
+    "TaskSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "normal",
+            "progress"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "recurrence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Recurrence"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Progress"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "TaskSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "goalID": {
+      "title": "Goalid",
+      "type": "string"
+    },
+    "plans": {
+      "items": {
+        "$ref": "#/$defs/Plan"
+      },
+      "title": "Plans",
+      "type": "array"
+    }
+  },
+  "required": [
+    "goalID",
+    "plans"
+  ],
+  "title": "GenerationResponse",
+  "type": "object"
+}

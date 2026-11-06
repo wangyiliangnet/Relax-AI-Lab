@@ -1,0 +1,26 @@
+[project]
+name = "relax-ai-lab"
+version = "0.1.0"
+description = "Local task-inspiration API and prompt workbench for Relax"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "httpx[socks]>=0.28,<1",
+  "psutil>=7,<8",
+  "pydantic>=2.10,<3",
+  "python-dotenv>=1,<2",
+  "uvicorn>=0.34,<1",
+]
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

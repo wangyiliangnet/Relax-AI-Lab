@@ -1,0 +1,126 @@
+{
+  "$defs": {
+    "Goal": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 10000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "startDate": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Startdate"
+        },
+        "deadline": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deadline"
+        },
+        "remainingDays": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Remainingdays"
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "title": "Goal",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "generationMode": {
+      "enum": [
+        "initial",
+        "refresh"
+      ],
+      "title": "Generationmode",
+      "type": "string"
+    },
+    "locale": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Locale",
+      "type": "string"
+    },
+    "today": {
+      "title": "Today",
+      "type": "string"
+    },
+    "goal": {
+      "$ref": "#/$defs/Goal"
+    },
+    "existingTaskTitles": {
+      "items": {
+        "maxLength": 500,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 2000,
+      "title": "Existingtasktitles",
+      "type": "array"
+    },
+    "excludedSuggestionTitles": {
+      "items": {
+        "maxLength": 500,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 2000,
+      "title": "Excludedsuggestiontitles",
+      "type": "array"
+    }
+  },
+  "required": [
+    "generationMode",
+    "locale",
+    "today",
+    "goal"
+  ],
+  "title": "GenerationRequest",
+  "type": "object"
+}
