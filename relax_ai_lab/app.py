@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -8,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import Field
 
 from .config import ROOT, Settings
+from .costs import PricingDeletion, PricingRule, pricing_schedule
 from .models import Contract, Experiment, GenerationRequest, Profile, PromptVersion
 from .network import connection_info
 from .provider import LabError
@@ -47,6 +49,7 @@ def create_app(settings: Settings | None = None, provider=None):
     @app.get("/prompts", include_in_schema=False)
     @app.get("/simulate", include_in_schema=False)
     @app.get("/history", include_in_schema=False)
+    @app.get("/costs", include_in_schema=False)
     async def index():
         return FileResponse(ROOT / "static" / "index.html")
 
@@ -110,6 +113,42 @@ def create_app(settings: Settings | None = None, provider=None):
     @app.get("/lab/runs", tags=["Lab"])
     async def history():
         return lab.store.recent_runs()
+
+    @app.get("/lab/costs", tags=["Lab"])
+    async def costs():
+        return lab.store.costs()
+
+    @app.get("/lab/pricing", tags=["Lab"])
+    async def pricing():
+        return lab.store.pricing()
+
+    @app.get("/lab/pricing-periods", tags=["Lab"])
+    async def pricing_periods():
+        return pricing_schedule()
+
+    @app.put("/lab/pricing", tags=["Lab"])
+    async def save_pricing(rule: PricingRule):
+        if lab.lock.locked():
+            raise LabError("busy", "有生成请求正在执行，请完成后再修改单价。", 409)
+        if not rule.label.strip():
+            raise LabError("invalid_pricing", "请填写单价版本或适用时段。", 422)
+        saved = {
+            **rule.model_dump(mode="json"),
+            "currency": "CNY",
+            "savedAt": datetime.now(UTC).isoformat(),
+            "baseURL": lab.settings.base_url,
+            "source": "custom",
+        }
+        lab.store.save_pricing(saved)
+        return saved
+
+    @app.delete("/lab/pricing", tags=["Lab"])
+    async def delete_pricing(target: PricingDeletion):
+        if lab.lock.locked():
+            raise LabError("busy", "有生成请求正在执行，请完成后再删除单价。", 409)
+        if not lab.store.delete_pricing(target.model_dump()):
+            raise LabError("pricing_not_found", "该模型与时段的单价已不存在，请刷新列表。", 404)
+        return {"deleted": True}
 
     @app.get("/lab/runs/{run_id}", tags=["Lab"])
     async def run_detail(run_id: str):
