@@ -5,7 +5,7 @@ from relax_ai_lab.app import create_app
 from relax_ai_lab.config import Settings
 
 
-@pytest.mark.parametrize("path", ["/deployment", "/prompts", "/simulate", "/history"])
+@pytest.mark.parametrize("path", ["/deployment", "/prompts", "/simulate", "/history", "/costs"])
 def test_page_deep_links_return_html(tmp_path, path):
     with TestClient(create_app(Settings(data_dir=tmp_path))) as client:
         response = client.get(path)

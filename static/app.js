@@ -1,6 +1,7 @@
 import { taskFacts } from "./task-presentation.mjs";
 import { createJsonViewer, embeddedJSON } from "./json-viewer.mjs";
 import { createHistoryController } from "./history.mjs";
+import { createCostsController, costText } from "./costs.mjs";
 const $ = (id) => document.getElementById(id);
 const json = (value) => JSON.stringify(value, null, 2);
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -38,6 +39,7 @@ const pages = {
   prompts: "Prompt 与模型参数",
   simulate: "目标与任务模拟",
   history: "历史与对比",
+  costs: "AI 开支",
 };
 function renderPage(name) {
   const selected = name in pages ? name : "simulate";
@@ -52,6 +54,7 @@ function renderPage(name) {
   document.title = `${pages[selected]} · Relax AI Lab`;
   syncConfigurationSummary();
   if (selected === "history" && initialized) historyUI.load().catch(report);
+  if (selected === "costs" && initialized) costsUI.load().catch(report);
 }
 function navigate(name) {
   if (!(name in pages)) return;
@@ -466,6 +469,7 @@ function renderMetrics(container, run) {
     ["耗时", duration],
     ["Tokens", run.usage?.total_tokens?.toLocaleString() ?? "—"],
     ["有效建议", `${count} 条`],
+    ["费用", costText(run.cost)],
   ]) {
     const box = node("div");
     box.append(node("small", label), node("b", value));
@@ -517,6 +521,7 @@ function traceData(run) {
     ["模型生成内容", run.rawResponse?.choices?.[0]?.message?.content ?? null],
     ["返回 App 的响应", run.result],
     ["完整上游响应", run.rawResponse],
+    ["费用与单价快照", { cost: run.cost, pricing: run.pricing, costRevisions: run.costRevisions }],
   ];
 }
 function renderTrace(container, run) {
@@ -548,6 +553,7 @@ function showRun(run) {
     "rawContentJson",
     "resultJson",
     "rawJson",
+    "costJson",
   ];
   traceData(run).forEach(([, value], index) =>
     $(ids[index]).replaceChildren(createJsonViewer(value)),
@@ -878,6 +884,7 @@ const historyUI = createHistoryController({
     }
   },
 });
+const costsUI = createCostsController({ api, notify: status });
 $("viewCurrentInHistory").onclick = () => {
   if (!currentRun) return;
   historyUI.focusRecord(currentRun.id);
@@ -909,6 +916,7 @@ async function init() {
   initialized = true;
   renderSession();
   if (location.pathname === "/history") historyUI.load().catch(report);
+  if (location.pathname === "/costs") costsUI.load().catch(report);
   loadConnection().catch((error) => {
     $("listenStatus").textContent = "读取连接配置失败";
     report(error);

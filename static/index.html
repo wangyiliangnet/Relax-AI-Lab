@@ -31,7 +31,8 @@
       <a href="/deployment" data-page-link="deployment">项目部署</a
       ><a href="/prompts" data-page-link="prompts">Prompt 与模型参数</a
       ><a href="/simulate" data-page-link="simulate">目标与任务模拟</a
-      ><a href="/history" data-page-link="history">历史与对比</a>
+      ><a href="/history" data-page-link="history">历史与对比</a
+      ><a href="/costs" data-page-link="costs">AI 开支</a>
     </nav>
     <main class="shell">
       <section
@@ -405,6 +406,10 @@ uv run python -m relax_ai_lab --host 0.0.0.0 --port 8765</pre>
                   <summary>完整上游响应</summary>
                   <div id="rawJson"></div>
                 </details>
+                <details class="json-section">
+                  <summary>费用与单价快照</summary>
+                  <div id="costJson"></div>
+                </details>
               </details>
             </section>
             <details class="box small-details request-state">
@@ -506,6 +511,48 @@ uv run python -m relax_ai_lab --host 0.0.0.0 --port 8765</pre>
           </section>
           <div id="comparison" class="comparison"></div>
         </div>
+      </section>
+      <section id="page-costs" class="page-view" data-page="costs" hidden>
+        <div class="page-heading">
+          <div><h1>AI 开支</h1><p>按 Provider、Prompt 版本与模型统计全部调用。</p></div>
+          <button id="reloadCosts" class="secondary">刷新统计</button>
+        </div>
+        <p id="costLoadState" class="hint" role="status"></p>
+        <div id="costMetrics" class="metrics cost-metrics"></div>
+        <p id="costCoverage" class="hint"></p>
+        <article class="box">
+          <div class="box-heading"><h2>版本费用汇总</h2></div>
+          <p class="hint">同一版本的不同 Prompt 指纹和草稿分别统计。模型返回用量后，即使建议校验失败也计入费用。</p>
+          <div class="cost-table-scroll" tabindex="0" role="region" aria-label="版本费用汇总表，可横向滚动">
+            <table class="cost-table">
+              <thead><tr><th scope="col">Provider</th><th scope="col">Prompt / 指纹</th><th scope="col">模型</th><th scope="col">单价时段</th><th scope="col">调用数</th><th scope="col">输入 / 输出 tokens</th><th scope="col">已知估算 · CNY</th><th scope="col">估算 / 未计费 / 未知 / 进行中</th></tr></thead>
+              <tbody id="costRows"></tbody>
+            </table>
+          </div>
+          <p id="costEmpty" class="empty">暂无调用记录。生成后在这里查看费用。</p>
+        </article>
+        <article class="box cost-pricing">
+          <div class="box-heading"><h2>调用单价</h2><a href="https://api-docs.deepseek.com/zh-cn/quick_start/pricing" target="_blank" rel="noreferrer">DeepSeek 官方价格 ↗</a></div>
+          <p class="hint">内置 DeepSeek 高峰期、DeepSeek 空闲时段、全时段三种单价版本。Flash 和 Pro 已内置官方高峰/空闲价格（2026-11-07 核对），按调用开始的北京时间及中国节假日日历自动选择。单位为元 / 百万 tokens。</p>
+          <p id="pricingSchedule" class="hint" role="status"></p>
+          <div id="pricingRules"></div>
+          <p class="hint">内置及自定义价格均可删除，刷新或重启后保持删除。删除仅影响后续调用，历史费用快照保留；无其他匹配价格时费用为未知。可在下方重新填写并保存价格。</p>
+          <form id="pricingForm">
+            <div class="two">
+              <div><label for="priceModel">DeepSeek 模型 ID</label><input id="priceModel" list="modelList" value="deepseek-flash" pattern="[a-zA-Z0-9._-]{1,100}" required /></div>
+              <div><label for="pricePeriod">单价版本</label><select id="pricePeriod"><option value="deepseek_peak">DeepSeek 高峰期</option><option value="deepseek_off_peak">DeepSeek 空闲时段</option><option value="all_day">全时段</option></select></div>
+            </div>
+            <div><label for="priceLabel">价格标签</label><input id="priceLabel" placeholder="例如：2026-11-07 官方价格" maxlength="120" required /></div>
+            <div class="price-inputs">
+              <div><label for="priceHit">输入 · 缓存命中</label><input id="priceHit" type="number" min="0" max="1000000" step="0.00000001" required /></div>
+              <div><label for="priceMiss">输入 · 缓存未命中</label><input id="priceMiss" type="number" min="0" max="1000000" step="0.00000001" required /></div>
+              <div><label for="priceOutput">输出</label><input id="priceOutput" type="number" min="0" max="1000000" step="0.00000001" required /></div>
+            </div>
+            <button id="savePricing" class="primary" type="submit">保存此模型与时段单价</button>
+          </form>
+          <p class="hint">全时段价格适用于每天 00:00–24:00，需要自行填写；同模型优先使用自定义时段价格，其次是全时段价格，再使用内置价格。高峰为北京时间周一至周五（中国法定节假日除外）09:00–12:00、14:00–18:00，其余为空闲时段，周末补班仍按空闲计。日历暂覆盖 2004–2027 年，超出范围的工作日高峰窗口保留未知。</p>
+          <p class="hint">已有 DeepSeek 调用已按记录时间和内置价格重新估算，详情保留原费用与价格快照。以后调价仅影响后续调用。无匹配价格或缺少用量时为未知；Mock 和明确未发送的请求为零。最终扣费以 Provider 账单为准。</p>
+        </article>
       </section>
     </main>
     <div

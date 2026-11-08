@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from .config import ROOT, Settings
+from .costs import cost_for_run, select_pricing
 from .models import GenerationRequest, Options, Profile, Task
 from .provider import DeepSeek, LabError, completion_request, mock_response
 from .storage import Store
@@ -16,6 +17,7 @@ class Lab:
     def __init__(self, settings: Settings, provider=None):
         self.settings = settings
         self.store = Store(settings.data_dir, settings.provider, settings.model)
+        self.store.backfill_builtin_pricing(settings.base_url)
         self.provider = provider or DeepSeek(settings)
         self.lock = asyncio.Lock()
 
@@ -96,7 +98,12 @@ class Lab:
                 "durationMs": None,
                 "entitlementBefore": self.entitlement(profile),
                 "feedback": None,
+                "providerAttempted": False,
             }
+            run["pricing"] = select_pricing(
+                run["options"], run["createdAt"], self.store.pricing(), self.settings.base_url
+            )
+            run["cost"] = cost_for_run(run)
             self.store.save_run(run)
             try:
                 if not run["entitlementBefore"]["canGenerate"]:
@@ -107,6 +114,8 @@ class Lab:
                         entitlement=run["entitlementBefore"],
                     )
                 effective = request.effective()
+                run["providerAttempted"] = options.provider != "mock"
+                self.store.save_run(run)
                 raw = (
                     mock_response(effective)
                     if options.provider == "mock"
@@ -143,5 +152,6 @@ class Lab:
                 raise error from exc
             finally:
                 run["durationMs"] = round((time.monotonic() - started) * 1000)
+                run["cost"] = cost_for_run(run)
                 self.store.save_run(run)
             return run

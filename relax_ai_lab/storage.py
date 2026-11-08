@@ -2,10 +2,16 @@ import json
 import re
 import sqlite3
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .config import ROOT
+from .costs import PRICE_VERSION, builtin_pricing, cost_for_run, cost_summary, select_pricing
 from .models import Options, Profile
+
+
+def pricing_key(rule):
+    return (rule["provider"], rule["model"], rule["period"], rule["baseURL"])
 
 
 class Store:
@@ -28,6 +34,7 @@ class Store:
                         status="interrupted",
                         error={"code": "server_restarted", "message": "服务重启，调用结果未知。"},
                     )
+                    run["cost"] = cost_for_run(run)
                     db.execute(
                         "UPDATE runs SET payload=? WHERE id=?", (json.dumps(run, ensure_ascii=False), run_id)
                     )
@@ -60,7 +67,107 @@ class Store:
     def run(self, run_id: str):
         with self.connect() as db:
             row = db.execute("SELECT payload FROM runs WHERE id=?", (run_id,)).fetchone()
-        return json.loads(row[0]) if row else None
+        if not row:
+            return None
+        run = json.loads(row[0])
+        run.setdefault("cost", cost_for_run(run))
+        return run
+
+    def custom_pricing(self):
+        with self.connect() as db:
+            row = db.execute("SELECT payload FROM state WHERE key='pricing'").fetchone()
+        rules = json.loads(row[0]) if row else []
+        # Supersede the former manually labelled Flash price with the two scheduled defaults.
+        return [
+            {**rule, "period": rule.get("period", "all_day"), "source": "custom"}
+            for rule in rules
+            if not (
+                rule["provider"] == "deepseek"
+                and rule["model"] == "deepseek-flash"
+                and "period" not in rule
+                and rule.get("baseURL") == "https://api.deepseek.com"
+            )
+        ]
+
+    def pricing(self):
+        rules = {pricing_key(rule): rule for rule in builtin_pricing()}
+        for rule in self.custom_pricing():
+            rules[pricing_key(rule)] = rule
+        with self.connect() as db:
+            deleted = {pricing_key(rule) for rule in self.pricing_deletions(db)}
+        return [rule for key, rule in rules.items() if key not in deleted]
+
+    def pricing_deletions(self, db):
+        row = db.execute("SELECT payload FROM state WHERE key='pricing_deleted'").fetchone()
+        return json.loads(row[0]) if row else []
+
+    def delete_pricing(self, target):
+        if not any(pricing_key(rule) == pricing_key(target) for rule in self.pricing()):
+            return False
+        with self.connect() as db:
+            # Keep source tariffs and suppress the whole identity, including any built-in fallback.
+            deleted = self.pricing_deletions(db)
+            deleted.append(target)
+            db.execute(
+                "INSERT INTO state VALUES ('pricing_deleted', ?) "
+                "ON CONFLICT(key) DO UPDATE SET payload=excluded.payload",
+                (json.dumps(deleted, ensure_ascii=False),),
+            )
+        return True
+
+    def save_pricing(self, rule: dict):
+        rules = [item for item in self.custom_pricing() if pricing_key(item) != pricing_key(rule)]
+        rules.append(rule)
+        with self.connect() as db:
+            db.execute(
+                "INSERT INTO state VALUES ('pricing', ?) "
+                "ON CONFLICT(key) DO UPDATE SET payload=excluded.payload",
+                (json.dumps(rules, ensure_ascii=False),),
+            )
+            deleted = [item for item in self.pricing_deletions(db) if pricing_key(item) != pricing_key(rule)]
+            db.execute(
+                "INSERT INTO state VALUES ('pricing_deleted', ?) "
+                "ON CONFLICT(key) DO UPDATE SET payload=excluded.payload",
+                (json.dumps(deleted, ensure_ascii=False),),
+            )
+
+    def backfill_builtin_pricing(self, base_url):
+        if base_url != "https://api.deepseek.com":
+            return
+        migration = f"pricing-backfill:{PRICE_VERSION}"
+        with self.connect() as db:
+            if db.execute("SELECT 1 FROM state WHERE key=?", (migration,)).fetchone():
+                return
+            updated = 0
+            for run_id, payload in db.execute("SELECT id,payload FROM runs").fetchall():
+                run = json.loads(payload)
+                pricing = select_pricing(run["options"], run.get("createdAt"), builtin_pricing(), base_url)
+                if pricing is None or run["status"] == "running":
+                    continue
+                previous = run.get("pricing")
+                if previous and previous.get("baseURL", base_url) != base_url:
+                    continue
+                applied_at = datetime.now(UTC).isoformat()
+                run.setdefault("costRevisions", []).append(
+                    {
+                        "pricing": previous,
+                        "cost": run.get("cost"),
+                        "repricedAt": applied_at,
+                        "reason": PRICE_VERSION,
+                    }
+                )
+                run["pricing"] = {**pricing, "appliedToHistory": True, "appliedAt": applied_at}
+                run["cost"] = cost_for_run(run)
+                db.execute(
+                    "UPDATE runs SET payload=? WHERE id=?", (json.dumps(run, ensure_ascii=False), run_id)
+                )
+                updated += 1
+            db.execute("INSERT INTO state VALUES (?,?)", (migration, json.dumps({"updated": updated})))
+
+    def costs(self):
+        with self.connect() as db:
+            rows = db.execute("SELECT payload FROM runs ORDER BY rowid DESC")
+            return cost_summary(json.loads(payload) for (payload,) in rows)
 
     def recent_runs(self):
         with self.connect() as db:
@@ -69,6 +176,7 @@ class Store:
         return [
             {
                 **{key: run.get(key) for key in keys},
+                "cost": run.get("cost") or cost_for_run(run),
                 "goalTitle": run["input"]["goal"]["title"],
                 "goalID": run["input"]["goal"]["id"],
                 "validTaskCount": sum(

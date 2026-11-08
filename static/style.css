@@ -756,7 +756,7 @@ details.small-details {
 }
 .metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
   gap: 8px;
   margin: 12px 0 18px;
 }
@@ -1585,4 +1585,68 @@ details.small-details {
   font-size: 11px;
   font-weight: 400;
   color: var(--muted);
+}
+
+.cost-metrics {
+  margin: 20px 0 10px;
+}
+.cost-table-scroll {
+  overflow-x: auto;
+}
+.cost-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 12px;
+}
+.cost-table th,
+.cost-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.cost-table th {
+  color: var(--muted);
+  font-weight: 500;
+}
+.cost-pricing {
+  margin-top: 24px;
+}
+.pricing-rule {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.pricing-rule .hint {
+  margin: 4px 0;
+  overflow-wrap: anywhere;
+}
+.pricing-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.pricing-delete {
+  color: var(--danger);
+}
+.price-inputs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+#pricingForm {
+  margin-top: 16px;
+}
+@media (max-width: 600px) {
+  .price-inputs {
+    grid-template-columns: 1fr;
+  }
+  .pricing-rule {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
 }

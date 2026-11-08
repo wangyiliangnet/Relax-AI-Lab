@@ -8,6 +8,7 @@
 - 选定的教练 prompt、`prompts/contract.md`；模型输入还包括 Task JSON Schema 和 capabilities。
 - `models.py`、`validation.py` 中的日期、循环、量化及 Pro 约束。Java 实现需独立校验，不能只依赖 JSON Output。
 - 导出的调用记录，用作人工质量对比与回归样例。原始目标可能含私人数据，整理后再决定是否提交。
+- `costs.py` 的缓存输入/输出费用计算及逐次价格快照。Java 使用 BigDecimal，保留未知费用状态；生产按账单、价格生效时段及节假日日历核算，不能把本地内置及自定义单价当作最终扣费依据。
 
 ## 生产接入时替换
 
