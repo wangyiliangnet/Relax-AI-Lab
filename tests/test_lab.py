@@ -203,6 +203,99 @@ def test_partial_invalid_duplicates_and_per_group_limit(request_body):
 
 
 @pytest.mark.parametrize(
+    "recurrence,has_pro",
+    [
+        ({"type": "daily"}, False),
+        ({"type": "selected_weekdays", "weekdays": ["monday", "thursday"]}, False),
+        ({"type": "selected_month_days", "includeLastDayOfMonth": True}, False),
+        ({"type": "interval", "interval": 2, "intervalUnit": "week"}, True),
+        ({"type": "ebbinghaus"}, True),
+    ],
+)
+def test_compact_model_recurrence_returns_complete_client_fields(request_body, recurrence, has_pro):
+    request = GenerationRequest.model_validate(request_body)
+    plans = [
+        {
+            "planType": "advanced",
+            "suggestions": [sample_task(taskSpec={"kind": "normal", "recurrence": recurrence})],
+        }
+    ]
+    raw = completion(plans)
+    original = copy.deepcopy(raw)
+    result, issues = validate_completion(raw, request, has_pro)
+    assert not issues
+    assert raw == original
+    actual = result.model_dump()["plans"][0]["suggestions"][0]["taskSpec"]["recurrence"]
+    assert actual == {
+        "type": recurrence["type"],
+        "weekdays": recurrence.get("weekdays", []),
+        "monthDays": recurrence.get("monthDays", []),
+        "includeLastDayOfMonth": recurrence.get("includeLastDayOfMonth", False),
+        "interval": recurrence.get("interval"),
+        "intervalUnit": recurrence.get("intervalUnit"),
+    }
+
+
+@pytest.mark.parametrize(
+    "recurrence,has_pro",
+    [
+        ({"type": "selected_weekdays"}, False),
+        ({"type": "selected_month_days"}, False),
+        ({"type": "interval", "interval": 2}, True),
+        ({"type": "interval", "interval": 2, "intervalUnit": "day"}, False),
+        ({"type": "daily", "weekdays": None}, False),
+        ({"type": "daily", "interval": 3}, False),
+        ({"type": "daily", "includeLastDayOfMonth": True}, False),
+        ({"type": "daily", "unknown": 1}, False),
+    ],
+)
+def test_compact_recurrence_does_not_repair_invalid_values(request_body, recurrence, has_pro):
+    plans = [
+        {
+            "planType": "advanced",
+            "suggestions": [sample_task(taskSpec={"kind": "normal", "recurrence": recurrence})],
+        }
+    ]
+    result, issues = validate_completion(
+        completion(plans), GenerationRequest.model_validate(request_body), has_pro
+    )
+    assert not result.plans
+    assert len(issues) == 1
+
+
+def test_compact_recurrence_through_generation_service(tmp_path, request_body):
+    class Provider:
+        async def generate(self, messages, options):
+            return completion(
+                [
+                    {
+                        "planType": "advanced",
+                        "suggestions": [
+                            sample_task(taskSpec={"kind": "normal", "recurrence": {"type": "daily"}})
+                        ],
+                    }
+                ]
+            )
+
+    lab = Lab(Settings(data_dir=tmp_path, provider="deepseek"), Provider())
+    run = asyncio.run(lab.generate(GenerationRequest.model_validate(request_body)))
+    assert run["status"] == "success"
+    assert run["issues"] == []
+    recurrence = run["result"]["plans"][0]["suggestions"][0]["taskSpec"]["recurrence"]
+    assert recurrence == {
+        "type": "daily",
+        "weekdays": [],
+        "monthDays": [],
+        "includeLastDayOfMonth": False,
+        "interval": None,
+        "intervalUnit": None,
+    }
+    original = json.loads(run["rawResponse"]["choices"][0]["message"]["content"])
+    assert original["plans"][0]["suggestions"][0]["taskSpec"]["recurrence"] == {"type": "daily"}
+    assert lab.entitlement()["usedCredits"] == 1
+
+
+@pytest.mark.parametrize(
     "content,finish,code",
     [
         (" ", "stop", "empty_output"),
