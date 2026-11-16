@@ -238,6 +238,18 @@ class Profile(Contract):
     creditsPerGeneration: float = Field(default=1, gt=0, le=1000000)
 
 
+class ProfilePatch(Profile):
+    """Update only explicitly supplied fields, including nested options."""
+
+    @model_validator(mode="after")
+    def nonempty_update(self):
+        if not self.model_fields_set:
+            raise ValueError("provide at least one profile field")
+        if "options" in self.model_fields_set and not self.options.model_fields_set:
+            raise ValueError("provide at least one options field")
+        return self
+
+
 class PromptSelection(Contract):
     options: Options
     promptText: str | None = Field(default=None, min_length=1, max_length=30000)

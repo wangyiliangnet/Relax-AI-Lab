@@ -3,6 +3,13 @@ import { createJsonViewer, embeddedJSON } from "./json-viewer.mjs";
 import { createHistoryController } from "./history.mjs";
 import { createCostsController, costText } from "./costs.mjs";
 import { createCasesController } from "./cases.mjs";
+import { createBatchComparison } from "./batch-comparison.mjs";
+import {
+  createWorkspaceStorage,
+  profilePatch,
+  configurationDifferences,
+} from "./workspace.mjs";
+import { createResultController } from "./result-detail.mjs";
 import { formatCaseVerdict } from "./case-batch.mjs";
 const $ = (id) => document.getElementById(id);
 const json = (value) => JSON.stringify(value, null, 2);
@@ -37,13 +44,152 @@ let profile,
   simulatedTaskGoal = null,
   initialized = false;
 let statusTimer;
+const workspace = createWorkspaceStorage();
+const restoredWorkspace = Boolean(
+  workspace.get("editor") || workspace.get("goal") || workspace.get("cases"),
+);
+const editorState = workspace.get("editor", {});
+const promptDrafts = Object.assign(
+  Object.create(null),
+  editorState.drafts && typeof editorState.drafts === "object"
+    ? editorState.drafts
+    : {},
+);
+const navigation = workspace.get("navigation", {});
+const scrollPositions = navigation.scrollPositions || {};
+let loadedPromptVersion = "",
+  currentPage = "simulate",
+  returnPage = ["simulate", "cases"].includes(navigation.returnPage)
+    ? navigation.returnPage
+    : "simulate",
+  goalReturn = false,
+  pendingGenerations = 0,
+  healthState = { busy: false, apiKeyConfigured: false },
+  healthRequest = null,
+  savingConfiguration = false,
+  rightsDirty = false;
+const optionFields = ["provider", "model", "temperature", "maxTokens"];
+const goalFields = ["goalID", "title", "note", "start", "deadline", "locale"];
+function rememberNavigation() {
+  workspace.set("navigation", { returnPage, scrollPositions });
+}
+function rememberEditor() {
+  if (!initialized) return;
+  const original = versions.find(
+    (version) => version.name === loadedPromptVersion,
+  )?.content;
+  if ($("prompt").value !== original)
+    promptDrafts[loadedPromptVersion] = $("prompt").value;
+  workspace.set("editor", {
+    options: options(),
+    text: $("prompt").value,
+    drafts: promptDrafts,
+    versionName: $("versionName").value,
+  });
+}
+function rememberGoal() {
+  if (initialized)
+    workspace.set(
+      "goal",
+      Object.fromEntries(goalFields.map((id) => [id, $(id).value])),
+    );
+}
+function generationBlocked() {
+  return pendingGenerations > 0 || healthState.busy;
+}
+function renderActivity() {
+  if (!initialized) return;
+  const label = pendingGenerations
+    ? session || runningCase
+      ? "本浏览器正在等待生成响应"
+      : "会话已关闭，已发送的请求仍在处理中"
+    : runningCase
+      ? "本浏览器正在执行用例批次"
+      : session
+        ? `当前会话 · ${phaseLabels[session.phase] || "准备中"}`
+        : healthState.busy
+          ? "服务正在处理请求（可能来自其他客户端）"
+          : "服务空闲";
+  $("activityText").textContent = label;
+  $("navSessionState").textContent = generationBlocked()
+    ? "服务忙碌"
+    : session
+      ? "会话已打开"
+      : runningCase
+        ? "评测中"
+        : "服务空闲";
+  $("navSessionState").hidden = false;
+  const target = runningCase ? "cases" : session ? "simulate" : "history";
+  $("activityLink").hidden = !session && !runningCase && !pendingGenerations;
+  $("activityLink").href = "/" + target;
+  $("activityLink").dataset.pageLink = target;
+  $("activityLink").textContent =
+    session || runningCase ? "返回活动 →" : "查看调用记录 →";
+  $("connection").textContent = healthState.apiKeyConfigured
+    ? "key 已配置 · 环境"
+    : "未配置 key · Mock 可用";
+  $("openSession").disabled =
+    !initialized || runningCase || generationBlocked();
+  $("refreshSession").disabled = generationBlocked();
+  $("retrySession").disabled = generationBlocked();
+  casesUI.sync({
+    initialized,
+    sessionOpen: Boolean(session),
+    blocked: generationBlocked(),
+  });
+  syncConfigurationSummary();
+}
+async function refreshHealth() {
+  if (healthRequest) return healthRequest;
+  healthRequest = api("/health")
+    .then((value) => {
+      healthState = value;
+      renderActivity();
+    })
+    .catch(() => {
+      if (initialized)
+        $("activityText").textContent =
+          "无法确认服务状态，请手动刷新；不会自动重试生成。";
+    })
+    .finally(() => {
+      healthRequest = null;
+    });
+  return healthRequest;
+}
+function validateConfiguration() {
+  for (const id of ["model", "temperature", "maxTokens"])
+    if (!$(id).reportValidity())
+      throw new Error("请在 Prompt 版本页修正模型参数。");
+}
+function validateGoal(show = true) {
+  $("title").setCustomValidity(
+    $("title").value.trim() ? "" : "请输入目标标题。",
+  );
+  $("deadline").setCustomValidity(
+    $("start").value &&
+      $("deadline").value &&
+      $("start").value > $("deadline").value
+      ? "截止日期不能早于开始日期。"
+      : "",
+  );
+  const invalid = ["title", "deadline"].filter((id) => !$(id).checkValidity());
+  for (const id of ["title", "deadline"])
+    $(id).classList.toggle("field-invalid", invalid.includes(id));
+  $("goalError").hidden = !invalid.length;
+  $("goalError").textContent = invalid
+    .map((id) => $(id).validationMessage)
+    .join(" ");
+  if (show && invalid.length) $(invalid[0]).reportValidity();
+  return !invalid.length;
+}
+
 const pages = {
-  deployment: "项目部署",
-  prompts: "Prompt 与模型参数",
-  cases: "用例评测",
-  simulate: "目标与任务模拟",
-  history: "历史与对比",
-  costs: "AI 开支",
+  deployment: "连接与环境",
+  prompts: "Prompt 版本",
+  cases: "固定用例",
+  simulate: "快速模拟",
+  history: "记录与对比",
+  costs: "开支",
 };
 function renderPage(name) {
   const selected = name in pages ? name : "simulate";
@@ -55,6 +201,17 @@ function renderPage(name) {
       link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   });
+  currentPage = selected;
+  const context = $("trialConfiguration");
+  context.hidden = !["simulate", "cases", "prompts"].includes(selected);
+  if (!context.hidden)
+    $("page-" + selected)
+      .querySelector(".page-heading")
+      .after(context);
+  $("returnToExperiment").href = "/" + returnPage;
+  $("returnToExperiment").dataset.pageLink = returnPage;
+  $("returnToExperiment").textContent = "返回" + pages[returnPage] + " →";
+  $("returnToPrompt").hidden = !goalReturn;
   document.title = `${pages[selected]} · Relax AI Lab`;
   syncConfigurationSummary();
   if (selected === "history" && initialized) historyUI.load().catch(report);
@@ -62,25 +219,88 @@ function renderPage(name) {
 }
 function navigate(name) {
   if (!(name in pages)) return;
+  scrollPositions[currentPage] = window.scrollY;
+  rememberNavigation();
   if (location.pathname !== `/${name}`) history.pushState({}, "", `/${name}`);
   renderPage(name);
   status("");
-  window.scrollTo(0, 0);
+  requestAnimationFrame(() => window.scrollTo(0, scrollPositions[name] || 0));
 }
 function syncConfigurationSummary() {
   if (!initialized) return;
-  const selected = session?.options || options();
-  const original = versions.find(
-    (version) => version.name === selected.promptVersion,
-  )?.content;
+  const batchConfiguration = casesUI.configuration();
+  const selected = session?.options || batchConfiguration?.options || options();
   const edited = session
     ? session.promptText !== null
-    : $("prompt").value !== original;
-  $("simulationConfig").textContent =
-    `${selected.promptVersion}${edited ? "（草稿）" : ""} · ${selected.model} · ${selected.provider}`;
-  $("evaluationConfig").textContent = $("simulationConfig").textContent;
+    : batchConfiguration
+      ? batchConfiguration.promptText !== null
+      : selectedPromptText() !== null;
+  const text = `${selected.promptVersion}${edited ? "（草稿）" : ""} · ${selected.model} · ${selected.provider}`;
+  $("simulationConfig").textContent = text;
+  $("evaluationConfig").textContent = text;
+  $("trialVersion").textContent = selected.promptVersion;
+  $("trialDraft").hidden = !edited;
+  $("trialProvider").textContent =
+    selected.provider === "mock" ? "Mock 固定样例" : "DeepSeek 真实调用";
+  $("trialModel").textContent =
+    `${selected.model} · 温度 ${selected.temperature} · 输出上限 ${selected.maxTokens}`;
+  $("trialScope").textContent = session
+    ? "当前会话已固定配置；关闭后可编辑"
+    : runningCase
+      ? "当前批次已固定配置；结束后可编辑"
+      : "仅用于本浏览器的后续实验";
+  $("providerNotice").textContent =
+    selected.provider === "mock"
+      ? "Mock 只验证联调流程，不代表 Prompt 通过质量评测。"
+      : healthState.apiKeyConfigured
+        ? "key 已配置；此状态不代表已验证模型连接。真实调用可能产生 token 费用。"
+        : "未配置 DeepSeek key，真实调用将明确失败。可显式选择 Mock，或到连接与环境查看配置步骤。";
+  const diffs = configurationDifferences(
+    options(),
+    profile.options,
+    selectedPromptText() !== null,
+  );
+  $("sharedDifferenceLink").textContent = diffs.length
+    ? "与服务共享配置有差异 →"
+    : "与服务共享配置一致 →";
+  $("configurationDifferences").replaceChildren();
+  $("configurationDifferences").className = diffs.length
+    ? "configuration-diff"
+    : "";
+  for (const diff of diffs)
+    $("configurationDifferences").append(
+      node("p", `${diff.label}：${diff.before} → ${diff.after}`),
+    );
+  const draft = selectedPromptText() !== null;
+  $("draftState").textContent = draft
+    ? "未保存的 Prompt 草稿"
+    : "与已保存版本一致";
+  $("discardDraft").hidden = !draft;
+  $("restoreDraft").hidden =
+    !promptDrafts[$("promptVersion").value] ||
+    promptDrafts[$("promptVersion").value] === $("prompt").value;
+  $("applyHint").textContent = draft
+    ? "请先保存新版本，再应用到共享服务。"
+    : diffs.length
+      ? "将以上生成配置应用于后续请求；模拟权益保持不变。"
+      : "当前试验配置与服务共享生成配置一致。";
+  $("applyProfile").disabled =
+    Boolean(session) ||
+    runningCase ||
+    savingConfiguration ||
+    generationBlocked() ||
+    draft ||
+    !diffs.length;
+  $("applyEntitlement").disabled =
+    Boolean(session) ||
+    runningCase ||
+    savingConfiguration ||
+    generationBlocked();
+  $("replaceWithShared").disabled =
+    Boolean(session) || runningCase || savingConfiguration;
+  $("reloadProfile").disabled = savingConfiguration;
   $("previewGoal").textContent =
-    `预览目标：${$("title").value || "未命名目标"}`;
+    `预览目标：${$("title").value || "未命名目标"} · ${$("start").value || "无开始日期"} → ${$("deadline").value || "无截止日期"} · ${$("locale").value} · initial`;
   const lockNotice = $("promptLockNotice");
   lockNotice.hidden = !session && !runningCase;
   lockNotice.replaceChildren();
@@ -93,6 +313,11 @@ function syncConfigurationSummary() {
     link.dataset.pageLink = session ? "simulate" : "cases";
     lockNotice.append(link, node("span", "，结束后可继续编辑。"));
   }
+  casesUI.sync({
+    initialized,
+    sessionOpen: Boolean(session),
+    blocked: generationBlocked(),
+  });
 }
 function status(text, error = false) {
   clearTimeout(statusTimer);
@@ -105,18 +330,36 @@ function report(error) {
   status(error.message, true);
 }
 async function api(path, method = "GET", body) {
-  const response = await fetch(path, {
-    method,
-    headers: body ? { "Content-Type": "application/json" } : {},
-    body: body ? json(body) : undefined,
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    const error = new Error(data.error?.message || json(data.detail || data));
-    error.data = data;
-    throw error;
+  const generation =
+    method === "POST" &&
+    (path === "/lab/runs" ||
+      /^\/lab\/cases\/[^/]+\/run$/.test(path) ||
+      /^\/lab\/batches\/[^/]+\/items\/[^/]+\/run$/.test(path));
+  if (generation) {
+    pendingGenerations++;
+    renderActivity();
   }
-  return data;
+  try {
+    const response = await fetch(path, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : {},
+      body: body ? json(body) : undefined,
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      if (data.error?.code === "busy") healthState.busy = true;
+      const error = new Error(data.error?.message || json(data.detail || data));
+      error.data = data;
+      throw error;
+    }
+    return data;
+  } finally {
+    if (generation) {
+      pendingGenerations--;
+      renderActivity();
+      refreshHealth();
+    }
+  }
 }
 function options() {
   return {
@@ -134,15 +377,8 @@ function selectedPromptText() {
   return $("prompt").value === original ? null : $("prompt").value;
 }
 function snapshot() {
-  for (const id of ["title", "model", "temperature", "maxTokens"])
-    if (!$(id).reportValidity()) throw new Error("请修正输入字段。");
-  if (!$("title").value.trim()) throw new Error("goal.title 不能为空。");
-  if (
-    $("start").value &&
-    $("deadline").value &&
-    $("start").value > $("deadline").value
-  )
-    throw new Error("goal.deadline 不能早于 goal.startDate。");
+  validateConfiguration();
+  if (!validateGoal()) throw new Error("请修正目标输入。");
   return {
     context: {
       locale: $("locale").value,
@@ -179,12 +415,16 @@ function generationRequest(state) {
   };
 }
 function lockInputs() {
-  const locked = Boolean(session) || runningCase;
+  const locked = Boolean(session) || runningCase || savingConfiguration;
   ["goalFields", "promptFields", "profileFields"].forEach(
     (id) => ($(id).disabled = locked || !initialized),
   );
   $("examples").disabled = locked || !initialized;
-  casesUI.sync({ initialized, sessionOpen: Boolean(session) });
+  casesUI.sync({
+    initialized,
+    sessionOpen: Boolean(session),
+    blocked: generationBlocked(),
+  });
   $("promptVersion").disabled = locked || !initialized;
   $("resetTasks").disabled = locked || simulatedTasks.length === 0;
 }
@@ -266,8 +506,8 @@ function renderSession() {
       node(
         "span",
         phase === "checking"
-          ? "GET /v1/ai/entitlement"
-          : "POST /lab/runs · 等待生成响应",
+          ? "正在检查模拟权益…"
+          : "正在生成任务建议，等待响应…",
       ),
     );
     container.append(loading);
@@ -281,6 +521,7 @@ function renderSession() {
     );
   else if (session.run) renderPlans(container, session.run, true);
   syncSelection();
+  renderActivity();
 }
 function syncSelection() {
   const state = session,
@@ -395,7 +636,8 @@ async function generate(state, replacing = false) {
   if (
     !state ||
     session !== state ||
-    ["checking", "generating"].includes(state.phase)
+    ["checking", "generating"].includes(state.phase) ||
+    generationBlocked()
   )
     return;
   if (replacing) state.mode = "refresh";
@@ -436,12 +678,14 @@ async function generate(state, replacing = false) {
     showRun(run);
     if (location.pathname === "/history") historyUI.load().catch(report);
     renderSession();
-    status(`已生成 ${tasks.length} 条建议，过滤 ${run.issues.length} 条。`);
+    status(`已生成 ${tasks.length} 条建议，过滤 ${run.issues.length} 项。`);
     if (run.entitlementAfter) {
       profile.usedCredits = run.entitlementAfter.usedCredits;
       profile.isPro = run.entitlementAfter.isPro;
-      $("usedCredits").value = profile.usedCredits;
-      $("membership").value = profile.isPro ? "pro" : "free";
+      if (!rightsDirty) {
+        $("usedCredits").value = profile.usedCredits;
+        $("membership").value = profile.isPro ? "pro" : "free";
+      }
       activeInfo();
     }
   } catch (error) {
@@ -542,6 +786,17 @@ function renderIssues(container, run) {
 }
 function traceData(run) {
   return [
+    [
+      "运行配置、权益与 Prompt 指纹",
+      {
+        source: run.source,
+        options: run.options,
+        promptEdited: run.promptEdited,
+        promptHash: run.promptHash,
+        entitlementBefore: run.entitlementBefore,
+        entitlementAfter: run.entitlementAfter,
+      },
+    ],
     ["请求上下文", run.input],
     [
       "发送给模型的请求",
@@ -571,35 +826,13 @@ function renderTrace(container, run) {
 function clearCurrentReport() {
   currentRun = null;
   $("currentReport").hidden = true;
-  $("export").disabled = true;
 }
 function showRun(run) {
   currentRun = run;
   $("currentReport").hidden = false;
-  $("diagnosticMeta").textContent =
-    `${run.status === "success" ? "成功" : "失败"} · ${run.id.slice(0, 8)}`;
-  $("runInfo").textContent = new Date(run.createdAt).toLocaleString("zh-CN", {
-    hour12: false,
-  });
-  renderMetrics($("metrics"), run);
-  renderIssues($("issues"), run);
-  const ids = [
-    "requestContextJson",
-    "requestJson",
-    "rawContentJson",
-    "resultJson",
-    "rawJson",
-    "costJson",
-  ];
-  traceData(run).forEach(([, value], index) =>
-    $(ids[index]).replaceChildren(createJsonViewer(value)),
-  );
-  $("rating").value = run.feedback?.rating || "needs_work";
-  $("reviewNote").value = run.feedback?.note || "";
-  $("export").disabled = false;
-  $("saveFeedback").disabled = false;
+  resultUI.render($("currentResult"), run, { tasks: false });
 }
-function populateVersions(name) {
+function populateVersions(name, text) {
   $("promptVersion").replaceChildren();
   for (const version of versions) {
     const option = node("option", version.name);
@@ -607,21 +840,23 @@ function populateVersions(name) {
     $("promptVersion").append(option);
   }
   $("promptVersion").value = name;
+  loadedPromptVersion = name;
   $("prompt").value =
-    versions.find((version) => version.name === name)?.content || "";
+    text ?? versions.find((version) => version.name === name)?.content ?? "";
   syncConfigurationSummary();
 }
 function activeInfo() {
   $("activeInfo").textContent =
-    `已保存：${profile.options.promptVersion} · ${profile.options.model} · ${profile.options.provider}`;
+    `当前生效：${profile.options.promptVersion} · ${profile.options.model} · ${profile.options.provider} · 温度 ${profile.options.temperature} · 输出上限 ${profile.options.maxTokens}`;
   $("creditInfo").textContent =
-    `积分额度：免费 ${profile.freeCredits} / Pro ${profile.proCredits}，每批 ${profile.creditsPerGeneration}。`;
+    `服务账本：${profile.isPro ? "Pro" : "免费"}，已用 ${profile.usedCredits}；额度免费 ${profile.freeCredits} / Pro ${profile.proCredits}，每批 ${profile.creditsPerGeneration}。`;
+  $("entitlementChanges").textContent =
+    `待应用：${$("membership").value === "pro" ? "Pro" : "免费"}，已用 ${$("usedCredits").value}；仅修改模拟权益。`;
   syncConfigurationSummary();
 }
 function loadProfileInputs() {
   populateVersions(profile.options.promptVersion);
-  for (const id of ["provider", "model", "temperature", "maxTokens"])
-    $(id).value = profile.options[id];
+  for (const id of optionFields) $(id).value = profile.options[id];
   $("membership").value = profile.isPro ? "pro" : "free";
   $("usedCredits").value = profile.usedCredits;
   activeInfo();
@@ -708,28 +943,47 @@ document.addEventListener("click", (event) => {
   )
     return;
   event.preventDefault();
+  if (link.id === "editPreviewGoal") goalReturn = true;
+  if (
+    link.dataset.pageLink === "prompts" &&
+    !link.closest(".site-nav") &&
+    currentPage !== "prompts"
+  ) {
+    if (["simulate", "cases"].includes(currentPage)) returnPage = currentPage;
+    if (link.id === "returnToPrompt") goalReturn = false;
+    rememberNavigation();
+  }
   navigate(link.dataset.pageLink);
+  const destination =
+    link.id === "sharedDifferenceLink"
+      ? ".shared-configuration"
+      : link.id === "editPreviewGoal"
+        ? ".goal-card"
+        : link.id === "returnToPrompt"
+          ? "#promptPreview"
+          : null;
+  if (destination)
+    requestAnimationFrame(() =>
+      document.querySelector(destination).scrollIntoView({ block: "start" }),
+    );
 });
 window.addEventListener("popstate", () =>
   renderPage(location.pathname.split("/")[1]),
 );
-$("theme").onchange = () => {
-  document.documentElement.dataset.theme = $("theme").value;
-  try {
-    localStorage.setItem("relax-lab-theme", $("theme").value);
-  } catch {}
+$("refreshHealth").onclick = refreshHealth;
+$("dismissRestored").onclick = () => {
+  $("restoredNotice").hidden = true;
 };
-try {
-  const theme = localStorage.getItem("relax-lab-theme");
-  if (["light", "dark", "system"].includes(theme)) {
-    $("theme").value = theme;
-    document.documentElement.dataset.theme = theme;
-  }
-} catch {}
-
+window.addEventListener("pagehide", () => {
+  rememberEditor();
+  rememberGoal();
+  scrollPositions[currentPage] = window.scrollY;
+  rememberNavigation();
+});
 $("openSession").onclick = () => {
   try {
-    if (session || runningCase || simulatedTasks.length) return;
+    if (session || runningCase || generationBlocked() || simulatedTasks.length)
+      return;
     session = {
       ...snapshot(),
       phase: "idle",
@@ -779,8 +1033,11 @@ $("newGoal").onclick = () => {
   $("note").value = "";
   $("start").value = "";
   $("deadline").value = "";
+  $("title").setCustomValidity("");
+  $("deadline").setCustomValidity("");
   $("title").focus();
   renderSession();
+  rememberGoal();
 };
 $("resetTasks").onclick = () => {
   simulatedTasks = [];
@@ -806,16 +1063,44 @@ $("examples").onchange = () => {
   $("start").value = example.days == null ? "" : dateString(start);
   $("deadline").value = example.days == null ? "" : dateString(deadline);
   renderSession();
+  rememberGoal();
 };
 $("promptVersion").onchange = () => {
-  $("prompt").value = versions.find(
-    (version) => version.name === $("promptVersion").value,
-  ).content;
+  rememberEditor();
+  const name = $("promptVersion").value;
+  loadedPromptVersion = name;
+  $("prompt").value =
+    promptDrafts[name] ??
+    versions.find((version) => version.name === name).content;
+  rememberEditor();
   syncConfigurationSummary();
 };
-["prompt", "provider", "model", "temperature", "maxTokens"].forEach((id) => {
-  $(id).addEventListener("input", syncConfigurationSummary);
+["prompt", ...optionFields, "versionName"].forEach((id) => {
+  $(id).addEventListener("input", () => {
+    rememberEditor();
+    syncConfigurationSummary();
+  });
 });
+goalFields.forEach((id) => {
+  $(id).addEventListener("input", () => {
+    rememberGoal();
+    validateGoal(false);
+    syncConfigurationSummary();
+  });
+});
+$("discardDraft").onclick = () => {
+  delete promptDrafts[loadedPromptVersion];
+  $("prompt").value = versions.find(
+    (version) => version.name === loadedPromptVersion,
+  ).content;
+  rememberEditor();
+  syncConfigurationSummary();
+};
+$("restoreDraft").onclick = () => {
+  $("prompt").value = promptDrafts[loadedPromptVersion];
+  rememberEditor();
+  syncConfigurationSummary();
+};
 $("preview").onclick = async () => {
   try {
     const context = snapshot(),
@@ -835,115 +1120,253 @@ $("preview").onclick = async () => {
   }
 };
 $("savePrompt").onclick = async () => {
+  if (savingConfiguration || session || runningCase) return;
+  $("versionName").setCustomValidity(
+    versions.some((version) => version.name === $("versionName").value)
+      ? "版本名已存在，请使用新名称。"
+      : "",
+  );
+  if (!$("versionName").reportValidity()) return;
+  $("prompt").setCustomValidity(
+    $("prompt").value.trim() ? "" : "Prompt 不能为空。",
+  );
+  if (!$("prompt").reportValidity()) return;
+  savingConfiguration = true;
+  lockInputs();
   try {
+    rememberEditor();
     const version = await api("/lab/prompts", "POST", {
       name: $("versionName").value,
       content: $("prompt").value,
     });
     versions = await api("/lab/prompts");
     populateVersions(version.name);
-    status(`已保存版本 ${version.name}。`);
-  } catch (error) {
-    report(error);
-  }
-};
-$("applyProfile").onclick = async () => {
-  try {
-    const original = versions.find(
-      (version) => version.name === $("promptVersion").value,
-    )?.content;
-    if (original !== $("prompt").value)
-      throw new Error("请先保存修改后的 prompt 版本，再应用共享配置。");
-    profile = await api("/lab/profile", "PUT", {
-      ...profile,
-      options: options(),
-      isPro: $("membership").value === "pro",
-      usedCredits: Number($("usedCredits").value),
-    });
-    activeInfo();
-    status("共享配置已保存。");
-  } catch (error) {
-    report(error);
-  }
-};
-$("reloadProfile").onclick = async () => {
-  try {
-    profile = await api("/lab/profile");
-    versions = await api("/lab/prompts");
-    loadProfileInputs();
-    status("已读取共享配置。");
-  } catch (error) {
-    report(error);
-  }
-};
-$("saveFeedback").onclick = async () => {
-  const record = currentRun;
-  if (!record) return;
-  $("saveFeedback").disabled = true;
-  try {
-    record.feedback = await api(
-      "/lab/runs/" + record.id + "/feedback",
-      "PATCH",
-      { rating: $("rating").value, note: $("reviewNote").value },
-    );
-    historyUI.noteFeedback(record);
-    status("评价已保存。");
+    $("versionName").value = "";
+    rememberEditor();
+    status(`已保存版本 ${version.name}；服务共享配置未改变。`);
   } catch (error) {
     report(error);
   } finally {
-    $("saveFeedback").disabled = false;
+    savingConfiguration = false;
+    lockInputs();
+    syncConfigurationSummary();
   }
 };
-$("export").onclick = () => {
-  if (!currentRun) return;
-  const url = URL.createObjectURL(
-    new Blob([json(currentRun)], { type: "application/json" }),
-  );
-  const link = node("a");
-  link.href = url;
-  link.download = `relax-ai-${currentRun.id}.json`;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+$("versionName").addEventListener("input", () =>
+  $("versionName").setCustomValidity(""),
+);
+$("prompt").addEventListener("input", () => $("prompt").setCustomValidity(""));
+$("applyProfile").onclick = async () => {
+  if (session || runningCase || generationBlocked() || savingConfiguration)
+    return;
+  try {
+    validateConfiguration();
+    if (selectedPromptText() !== null)
+      throw new Error("请先保存修改后的 Prompt 版本，再应用共享配置。");
+    savingConfiguration = true;
+    lockInputs();
+    syncConfigurationSummary();
+    const patch = profilePatch(profile, { options: options() });
+    if (!Object.keys(patch).length) {
+      status("生成配置与服务共享配置一致。");
+      return;
+    }
+    profile = await api("/lab/profile", "PATCH", patch);
+    activeInfo();
+    status("生成配置已应用到共享服务，后续请求生效；模拟权益未修改。");
+  } catch (error) {
+    report(error);
+  } finally {
+    savingConfiguration = false;
+    lockInputs();
+    syncConfigurationSummary();
+  }
 };
-const historyUI = createHistoryController({
+$("applyEntitlement").onclick = async () => {
+  if (session || runningCase || generationBlocked() || savingConfiguration)
+    return;
+  if (!$("usedCredits").reportValidity()) return;
+  const desired = {
+    isPro: $("membership").value === "pro",
+    usedCredits: Number($("usedCredits").value),
+  };
+  const patch = profilePatch(profile, desired);
+  if (!Object.keys(patch).length) {
+    rightsDirty = false;
+    status("模拟权益与服务配置一致。");
+    return;
+  }
+  savingConfiguration = true;
+  lockInputs();
+  syncConfigurationSummary();
+  try {
+    profile = await api("/lab/profile", "PATCH", patch);
+    rightsDirty = false;
+    activeInfo();
+    status("模拟权益已应用；服务生成配置未改变。");
+  } catch (error) {
+    report(error);
+  } finally {
+    savingConfiguration = false;
+    lockInputs();
+    syncConfigurationSummary();
+  }
+};
+["membership", "usedCredits"].forEach((id) =>
+  $(id).addEventListener("input", () => {
+    rightsDirty = true;
+    activeInfo();
+  }),
+);
+$("reloadProfile").onclick = async () => {
+  try {
+    const [latest, prompts] = await Promise.all([
+      api("/lab/profile"),
+      api("/lab/prompts"),
+    ]);
+    profile = latest;
+    versions = prompts;
+    const name = $("promptVersion").value,
+      text = $("prompt").value;
+    populateVersions(name, text);
+    activeInfo();
+    status("共享配置已刷新；当前试验草稿未替换。");
+  } catch (error) {
+    report(error);
+  }
+};
+$("replaceWithShared").onclick = () => {
+  if (session || runningCase || savingConfiguration) return;
+  rememberEditor();
+  for (const id of optionFields) $(id).value = profile.options[id];
+  populateVersions(profile.options.promptVersion);
+  rememberEditor();
+  activeInfo();
+  status("已用当前显示的共享配置替换试验配置；原版本草稿可恢复。");
+};
+$("reloadEntitlement").onclick = async () => {
+  try {
+    profile = await api("/lab/profile");
+    rightsDirty = false;
+    $("membership").value = profile.isPro ? "pro" : "free";
+    $("usedCredits").value = profile.usedCredits;
+    activeInfo();
+    status("已读取服务模拟权益。");
+  } catch (error) {
+    report(error);
+  }
+};
+async function copyRun(run) {
+  if (session || runningCase || generationBlocked()) {
+    status("请先结束当前会话或评测，再复制为新的试验。", true);
+    return;
+  }
+  try {
+    const prompts = await api("/lab/prompts");
+    const base = prompts.find(
+      (version) => version.name === run.options.promptVersion,
+    );
+    if (!base)
+      throw new Error("该运行的基础 Prompt 版本已不存在，请查看原始记录。");
+    let text = base.content;
+    if (run.promptEdited) {
+      const preview = await api("/lab/preview", "POST", {
+        request: run.input,
+        options: run.options,
+        promptText: base.content,
+      });
+      const suffix = preview.messages[0].content.slice(base.content.length);
+      const historical =
+        run.messages?.[0]?.content ||
+        run.providerRequest?.messages?.[0]?.content;
+      if (!suffix || !historical?.endsWith(suffix))
+        throw new Error(
+          "历史固定契约或 Schema 已变化，无法自动还原该草稿，请从原始记录核对。",
+        );
+      text = historical.slice(0, -suffix.length);
+    }
+    if (session || runningCase || generationBlocked())
+      throw new Error("当前已打开会话或正在执行请求，请结束后再复制试验。");
+    rememberEditor();
+    versions = prompts;
+    resetGoal();
+    const goal = run.input.goal;
+    for (const [id, value] of Object.entries({
+      goalID: goal.id,
+      title: goal.title,
+      note: goal.note || "",
+      start: goal.startDate || "",
+      deadline: goal.deadline || "",
+      locale: run.input.locale,
+    }))
+      $(id).value = value;
+    for (const id of optionFields) $(id).value = run.options[id];
+    populateVersions(run.options.promptVersion, text);
+    rememberEditor();
+    rememberGoal();
+    renderSession();
+    navigate("simulate");
+    status(
+      "已复制目标、语言与生成配置。新会话从 initial 开始，不带入旧会话排重历史。",
+    );
+  } catch (error) {
+    report(error);
+  }
+}
+const resultUI = createResultController({
   api,
-  formatCaseVerdict,
+  workspace,
   renderPlans,
-  renderIssues,
   renderMetrics,
+  renderIssues,
   renderTrace,
   notify: status,
   onFeedback(run) {
+    historyUI.noteFeedback(run);
     casesUI.noteFeedback(run);
-    if (currentRun?.id === run.id) {
-      currentRun.feedback = run.feedback;
-      $("rating").value = run.feedback.rating;
-      $("reviewNote").value = run.feedback.note;
-    }
+    if (currentRun?.id === run.id) currentRun.feedback = run.feedback;
   },
+  onCompare(slot, run) {
+    historyUI.chooseRun(slot, run);
+    navigate("history");
+  },
+  onCopy: copyRun,
+});
+const historyUI = createHistoryController({
+  api,
+  workspace,
+  renderResult: (...args) => resultUI.render(...args),
+  notify: status,
+  onBatchView: () => batchComparisonUI.load().catch(report),
+});
+const batchComparisonUI = createBatchComparison({
+  api,
+  workspace,
+  renderResult: (...args) => resultUI.render(...args),
+  notify: status,
 });
 const casesUI = createCasesController({
   api,
+  workspace,
+  getProvider: () => $("provider").value,
   getConfiguration() {
-    for (const id of ["model", "temperature", "maxTokens"])
-      if (!$(id).reportValidity())
-        throw new Error("请在 Prompt 与模型参数页修正配置。");
+    validateConfiguration();
     return { options: options(), promptText: selectedPromptText() };
   },
   onRunningChange(value) {
     runningCase = value;
     renderSession();
   },
-  renderPlans,
-  renderMetrics,
-  renderTrace,
+  renderResult: (...args) => resultUI.render(...args),
   notify: status,
   onViewHistory(id) {
     historyUI.focusRecord(id);
     navigate("history");
   },
-  onFeedback(run) {
-    historyUI.noteFeedback(run);
+  onCompareBatch(slot, batch) {
+    batchComparisonUI.choose(slot, batch);
+    historyUI.showBatchCompare();
+    navigate("history");
   },
 });
 const costsUI = createCostsController({ api, notify: status });
@@ -966,11 +1389,9 @@ async function init() {
   profile = currentProfile;
   versions = prompts;
   samples = examples;
-  casesUI.setCatalog(catalog);
+  await casesUI.setCatalog(catalog);
   loadProfileInputs();
-  $("connection").textContent = health.apiKeyConfigured
-    ? "DEEPSEEK_API_KEY 已配置"
-    : "DEEPSEEK_API_KEY 未配置";
+  healthState = health;
   for (let index = 0; index < samples.length; index++) {
     const option = node("option", samples[index].label);
     option.value = index;
@@ -981,8 +1402,40 @@ async function init() {
   const deadline = new Date();
   deadline.setDate(deadline.getDate() + 90);
   $("deadline").value = dateString(deadline);
+  const savedGoal = workspace.get("goal");
+  if (savedGoal && typeof savedGoal === "object") {
+    for (const id of goalFields)
+      if (typeof savedGoal[id] === "string") $(id).value = savedGoal[id];
+    if (!/^[0-9a-f-]{36}$/i.test($("goalID").value))
+      $("goalID").value = createID();
+  }
+  if (
+    editorState.options &&
+    versions.some(
+      (version) => version.name === editorState.options.promptVersion,
+    )
+  ) {
+    for (const id of optionFields)
+      if (editorState.options[id] != null)
+        $(id).value = editorState.options[id];
+    populateVersions(
+      editorState.options.promptVersion,
+      typeof editorState.text === "string" ? editorState.text : undefined,
+    );
+    if (typeof editorState.versionName === "string")
+      $("versionName").value = editorState.versionName;
+  }
+  $("restoredNotice").hidden = !restoredWorkspace;
   initialized = true;
+  rememberGoal();
+  rememberEditor();
   renderSession();
+  setInterval(() => {
+    if (!document.hidden) refreshHealth();
+  }, 5000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refreshHealth();
+  });
   if (location.pathname === "/history") historyUI.load().catch(report);
   if (location.pathname === "/costs") costsUI.load().catch(report);
   loadConnection().catch((error) => {

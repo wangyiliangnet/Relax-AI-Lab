@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from .config import ROOT, Settings
 from .costs import cost_for_run, select_pricing
-from .models import GenerationRequest, Options, Profile, Task
+from .models import GenerationRequest, Options, Profile, ProfilePatch, Task
 from .provider import DeepSeek, LabError, completion_request, mock_response
 from .storage import Store
 from .validation import validate_completion
@@ -69,6 +69,19 @@ class Lab:
             self.preview_request_check(profile.options)
             self.store.save_profile(profile)
 
+    async def patch_profile(self, patch: ProfilePatch):
+        if self.lock.locked():
+            raise LabError("busy", "有生成请求正在执行，请完成后再修改当前配置。", 409)
+        async with self.lock:
+            values = self.store.profile().model_dump()
+            changes = patch.model_dump(exclude_unset=True)
+            values["options"].update(changes.pop("options", {}))
+            values.update(changes)
+            profile = Profile.model_validate(values)
+            self.preview_request_check(profile.options)
+            self.store.save_profile(profile)
+            return profile
+
     def preview_request_check(self, options):
         try:
             self.store.prompt(options.promptVersion)
@@ -76,7 +89,16 @@ class Lab:
             raise LabError("unknown_prompt", "所选 prompt 版本不存在。", 422) from exc
 
     async def generate(
-        self, request: GenerationRequest, options=None, prompt_text=None, source="ios", *, case=None
+        self,
+        request: GenerationRequest,
+        options=None,
+        prompt_text=None,
+        source="ios",
+        *,
+        case=None,
+        prepared=None,
+        run_id=None,
+        batch_id=None,
     ):
         if self.lock.locked():
             raise LabError("busy", "本地实验服务每次执行一个生成请求，请稍后手动重试。", 409)
@@ -84,10 +106,12 @@ class Lab:
             # A fixture owns its simulated entitlement. Browser/iOS sessions share the normal ledger.
             profile = self.store.profile() if case is None else Profile(isPro=case["isPro"])
             options = options or profile.options
-            preview = self.preview(request, options, prompt_text, profile)
+            preview = (
+                prepared if prepared is not None else self.preview(request, options, prompt_text, profile)
+            )
             started = time.monotonic()
             run = {
-                "id": str(uuid4()),
+                "id": run_id or str(uuid4()),
                 "createdAt": datetime.now(UTC).isoformat(),
                 "source": source,
                 "status": "running",
@@ -105,6 +129,8 @@ class Lab:
             }
             if case is not None:
                 run["case"] = case
+            if batch_id is not None:
+                run["batchID"] = batch_id
             run["pricing"] = select_pricing(
                 run["options"], run["createdAt"], self.store.pricing(), self.settings.base_url
             )

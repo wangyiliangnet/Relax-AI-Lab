@@ -1,8 +1,8 @@
 import { createJsonViewer } from "./json-viewer.mjs";
 import {
-  createCaseBatch,
   executeCaseBatch,
   filterCases,
+  matchesCaseResult,
   summarizeBatch,
   verdictLabels,
 } from "./case-batch.mjs";
@@ -21,12 +21,12 @@ export function createCasesController({
   api,
   getConfiguration,
   onRunningChange,
-  renderPlans,
-  renderMetrics,
-  renderTrace,
+  renderResult,
+  workspace,
+  getProvider,
   notify,
   onViewHistory,
-  onFeedback,
+  onCompareBatch,
 }) {
   let catalog = [],
     selected = new Set(),
@@ -34,39 +34,200 @@ export function createCasesController({
     batch = null,
     initialized = false,
     sessionOpen = false,
+    blocked = false,
     detailKey = "",
-    detailRequest = 0;
+    detailRequest = 0,
+    executing = false,
+    stopByUser = false,
+    viewingArchive = false,
+    ownedCurrent = false,
+    archivePage = 1,
+    archivePages = 1,
+    archiveRequest = 0,
+    pollTimer = null,
+    lastRunning = false;
   const cache = new Map();
-  const feedbackDrafts = new Map();
-  const running = () => batch?.phase === "running";
+  const reviewed = new Set();
+  const saved = workspace.get("cases", {});
+  archivePage =
+    Number.isInteger(saved.archivePage) && saved.archivePage > 0
+      ? saved.archivePage
+      : 1;
+  if (typeof saved.name === "string") $("batchName").value = saved.name;
+  if (typeof saved.query === "string") $("caseSearch").value = saved.query;
+  if (["all", "main", "holdout"].includes(saved.suite))
+    $("caseSuite").value = saved.suite;
+  const remember = () =>
+    workspace.set("cases", {
+      query: $("caseSearch").value,
+      suite: $("caseSuite").value,
+      selected: [...selected],
+      activeID,
+      batchID: batch?.id || null,
+      owned: ownedCurrent,
+      archivePage,
+      name: $("batchName").value,
+    });
+  const running = () =>
+    executing || Boolean(batch?.items.some((item) => item.state === "running"));
+  const displayCases = () =>
+    viewingArchive && batch ? batch.items.map((item) => item.case) : catalog;
   const visibleCases = () =>
-    filterCases(catalog, $("caseSearch").value, $("caseSuite").value);
+    filterCases(
+      displayCases(),
+      $("caseSearch").value,
+      $("caseSuite").value,
+    ).filter((item) =>
+      matchesCaseResult(
+        batchItem(item.id),
+        $("caseResultFilter").value,
+        reviewed.has(batchItem(item.id)?.report?.runID),
+      ),
+    );
   const batchItem = (id) => batch?.items.find((item) => item.caseID === id);
 
+  function activityChanged() {
+    if (lastRunning !== running()) {
+      lastRunning = running();
+      onRunningChange(lastRunning);
+    }
+  }
+  async function refreshArchives() {
+    const request = ++archiveRequest;
+    const data = await api(`/lab/batches?page=${archivePage}&pageSize=8`);
+    if (request !== archiveRequest) return;
+    archivePage = data.page;
+    archivePages = data.totalPages;
+    $("batchArchiveStatus").textContent =
+      `共 ${data.total} 个批次；选择归档不会自动发出模型请求。`;
+    $("batchArchivePage").textContent = `${archivePage} / ${archivePages}`;
+    $("batchArchivePrev").disabled = archivePage <= 1;
+    $("batchArchiveNext").disabled = archivePage >= archivePages;
+    $("batchArchiveList").replaceChildren();
+    for (const entry of data.items) {
+      const row = node("div", null, "batch-archive-row");
+      const info = node("div");
+      info.append(
+        node("strong", entry.name || entry.options.promptVersion),
+        node(
+          "p",
+          `${new Date(entry.startedAt).toLocaleString("zh-CN", { hour12: false })} · ${entry.options.provider} · ${entry.options.model} · ${entry.caseCount} 条 · ${{ completed: "已完成", stopped: "已停止", interrupted: "已中断", running: "待执行或处理中" }[entry.phase]} · ${entry.id.slice(0, 8)}`,
+          "hint",
+        ),
+      );
+      const actions = node("div", null, "button-row");
+      const open = node("button", "打开归档", "secondary");
+      open.type = "button";
+      open.onclick = () =>
+        openArchive(entry.id).catch((error) => notify(error.message, true));
+      for (const slot of ["a", "b"]) {
+        const compare = node(
+          "button",
+          "批次 " + slot.toUpperCase(),
+          "secondary",
+        );
+        compare.type = "button";
+        compare.onclick = () => onCompareBatch(slot, entry);
+        actions.append(compare);
+      }
+      actions.prepend(open);
+      row.append(info, actions);
+      $("batchArchiveList").append(row);
+    }
+    remember();
+  }
+  function showBatch(value, archived = viewingArchive) {
+    batch = value;
+    viewingArchive = archived;
+    for (const item of batch.items) if (item.feedback) reviewed.add(item.runID);
+    detailKey = "";
+    renderList();
+    renderProgress();
+    renderDetail();
+    activityChanged();
+    remember();
+  }
+  function poll() {
+    clearTimeout(pollTimer);
+    if (executing || !batch || batch.phase !== "running") return;
+    const id = batch.id;
+    pollTimer = setTimeout(async () => {
+      try {
+        const value = await api("/lab/batches/" + id);
+        if (batch?.id !== id || executing) return;
+        showBatch(value);
+        poll();
+      } catch (error) {
+        notify("读取批次失败，请刷新归档：" + error.message, true);
+        pollTimer = setTimeout(poll, 4000);
+      }
+    }, 1000);
+  }
+  async function openArchive(id, restoreOwned = false) {
+    if (executing) throw new Error("请等待或停止当前批次，再打开其他归档。");
+    let value = await api("/lab/batches/" + encodeURIComponent(id));
+    if (restoreOwned && value.phase === "running")
+      value = await api(
+        "/lab/batches/" + encodeURIComponent(id) + "/stop",
+        "POST",
+        { reason: "browser_refresh" },
+      );
+    ownedCurrent = false;
+    cache.clear();
+    reviewed.clear();
+    activeID = value.items.some((item) => item.caseID === activeID)
+      ? activeID
+      : value.items[0]?.caseID;
+    $("caseSearch").value = "";
+    $("caseResultFilter").value = "all";
+    showBatch(value, true);
+    poll();
+  }
   function updateControls() {
     const visible = visibleCases(),
       count = visible.filter((item) => selected.has(item.id)).length;
-    $("caseCatalogCount").textContent = `${visible.length} / ${catalog.length}`;
+    $("caseCatalogCount").textContent =
+      `${visible.length} / ${displayCases().length}`;
     $("caseSelectionCount").textContent = selected.size
-      ? `已选择 ${selected.size} 条用例`
+      ? `已选择 ${selected.size} 条用例（其中 ${selected.size - count} 条不在当前筛选中）`
       : "选择要评测的用例";
+    const configProvider = getProvider();
+    const maximumCalls = catalog.filter(
+      (item) => selected.has(item.id) && !item.expect.inputError,
+    ).length;
     $("evaluationHint").textContent = running()
-      ? "本批配置已固定，按顺序执行；切换页面后会继续运行。"
-      : "每条使用固定日期与模拟权益；Mock 结果单独统计，建议质量需人工核对。";
+      ? "本批配置已固定；站内导航继续，刷新读取归档并停止后续，不自动续跑。"
+      : blocked
+        ? "服务正在处理请求，请完成后手动运行。"
+        : `每条采用自身权益；${configProvider === "mock" ? "Mock 不调用模型，不作质量结论。" : `预计最多 ${maximumCalls} 次上游调用，实际以执行结果为准。`}`;
     $("runCases").textContent = running()
       ? "评测运行中…"
-      : `运行所选用例${selected.size ? `（${selected.size}）` : ""}`;
+      : `${configProvider === "mock" ? "运行 Mock 联调" : "运行所选用例"}${selected.size ? `（${selected.size}）` : ""}`;
     $("runCases").disabled =
-      !initialized || sessionOpen || running() || !selected.size;
-    $("stopCases").hidden = !running();
+      !initialized ||
+      sessionOpen ||
+      blocked ||
+      running() ||
+      viewingArchive ||
+      !selected.size;
+    $("caseResultFilter").disabled = !batch;
+    $("stopCases").hidden = !batch || batch.phase !== "running";
     $("stopCases").disabled = Boolean(batch?.stopRequested);
     $("stopCases").textContent = batch?.stopRequested
       ? "等待当前用例完成…"
       : "停止后续用例";
-    $("exportCases").disabled = !batch || running();
-    $("clearCases").disabled = running() || !selected.size;
+    $("exportCases").disabled = !batch;
+    $("batchName").disabled = running();
+    $("currentCaseLibrary").disabled = running();
+    $("leaveArchive").hidden = !viewingArchive;
+    $("leaveArchive").disabled = running();
+    $("archiveViewNotice").hidden = !viewingArchive;
+    $("archiveViewNotice").textContent = batch
+      ? `正在查看归档 ${batch.name || batch.id}。输入、断言与配置采用本批快照；不会自动续跑。返回当前用例库可准备新批次。`
+      : "";
+    $("clearCases").disabled = running() || viewingArchive || !selected.size;
     $("selectVisibleCases").disabled =
-      !initialized || running() || !visible.length;
+      !initialized || running() || viewingArchive || !visible.length;
     $("selectVisibleCases").checked =
       visible.length > 0 && count === visible.length;
     $("selectVisibleCases").indeterminate = count > 0 && count < visible.length;
@@ -93,13 +254,14 @@ export function createCasesController({
       row.classList.toggle("is-checked", selected.has(item.id));
       checkbox.type = "checkbox";
       checkbox.checked = selected.has(item.id);
-      checkbox.disabled = running();
+      checkbox.disabled = running() || viewingArchive;
       checkbox.setAttribute("aria-label", `选择用例：${item.label}`);
       checkbox.onchange = () => {
         if (checkbox.checked) selected.add(item.id);
         else selected.delete(item.id);
         row.classList.toggle("is-checked", checkbox.checked);
         updateControls();
+        remember();
       };
       preview.type = "button";
       preview.setAttribute("aria-pressed", String(activeID === item.id));
@@ -154,6 +316,7 @@ export function createCasesController({
       list.append(row);
     }
     updateControls();
+    remember();
   }
 
   function renderProgress() {
@@ -163,13 +326,17 @@ export function createCasesController({
       current = batch.items.find((item) => item.state === "running");
     $("batchHeading").textContent = running()
       ? "正在评测"
-      : batch.phase === "stopped"
-        ? "评测已停止"
-        : "本批评测完成";
+      : batch.phase === "interrupted"
+        ? "批次已中断（未续跑）"
+        : batch.phase === "stopped"
+          ? "评测已停止"
+          : batch.phase === "running"
+            ? "等待浏览器执行或停止"
+            : "本批评测完成";
     $("batchProgressText").textContent =
       `${counts.completed} / ${batch.items.length} 已完成${current ? ` · ${catalog.find((item) => item.id === current.caseID)?.label || current.caseID}` : ""}`;
     $("batchConfiguration").textContent =
-      `本批配置：${configurationText(batch.configuration)} · 温度 ${batch.configuration.options.temperature} · 输出上限 ${batch.configuration.options.maxTokens}`;
+      `归档 ${batch.id} · 本批配置：${configurationText(batch.configuration)} · 温度 ${batch.configuration.options.temperature} · 输出上限 ${batch.configuration.options.maxTokens}`;
     $("batchProgress").max = batch.items.length;
     $("batchProgress").value = counts.completed;
     $("batchCounts").replaceChildren();
@@ -194,66 +361,9 @@ export function createCasesController({
           : "点击用例查看建议与人工检查项；调用记录已保存，可在历史中评价和对比。");
   }
 
-  function feedbackEditor(run) {
-    const section = node("section", null, "review record-section"),
-      select = node("select"),
-      note = node("textarea"),
-      save = node("button", "保存评价", "secondary");
-    const label = node("label", "评价"),
-      noteLabel = node("label", "备注");
-    select.id = "caseRating";
-    note.id = "caseReviewNote";
-    label.htmlFor = select.id;
-    noteLabel.htmlFor = note.id;
-    note.rows = 3;
-    for (const [value, text] of [
-      ["good", "可用"],
-      ["needs_work", "需调整"],
-      ["bad", "不可用"],
-    ]) {
-      const option = node("option", text);
-      option.value = value;
-      select.append(option);
-    }
-    const draft = feedbackDrafts.get(run.id) || run.feedback;
-    select.value = draft?.rating || "needs_work";
-    note.value = draft?.note || "";
-    const rememberDraft = () =>
-      feedbackDrafts.set(run.id, {
-        rating: select.value,
-        note: note.value,
-      });
-    select.onchange = rememberDraft;
-    note.oninput = rememberDraft;
-    save.onclick = async () => {
-      save.disabled = true;
-      try {
-        run.feedback = await api(`/lab/runs/${run.id}/feedback`, "PATCH", {
-          rating: select.value,
-          note: note.value,
-        });
-        feedbackDrafts.delete(run.id);
-        onFeedback(run);
-        notify("评价已保存。");
-      } catch (error) {
-        notify(error.message, true);
-      } finally {
-        save.disabled = false;
-      }
-    };
-    section.append(
-      node("h3", "人工评价"),
-      label,
-      select,
-      noteLabel,
-      note,
-      save,
-    );
-    return section;
-  }
-
   async function renderDetail(force = false) {
-    const item = catalog.find((item) => item.id === activeID);
+    const item =
+      batchItem(activeID)?.case || catalog.find((item) => item.id === activeID);
     if (!item) return;
     const result = batchItem(item.id),
       key = `${item.id}|${result?.state}|${result?.report?.runID}|${result?.error}`;
@@ -370,16 +480,7 @@ export function createCasesController({
       cache.set(run.id, run);
       if (request !== detailRequest) return;
       body.replaceChildren();
-      const metrics = node("div", null, "metrics");
-      renderMetrics(metrics, run);
-      body.append(metrics);
-      renderPlans(body, run, false, { compact: true });
-      body.append(feedbackEditor(run));
-      const trace = node("details", null, "record-trace"),
-        content = node("div");
-      trace.append(node("summary", "请求、原始响应与费用"), content);
-      renderTrace(content, run);
-      body.append(trace);
+      renderResult(body, run);
     } catch (error) {
       if (request !== detailRequest) return;
       body.replaceChildren(
@@ -393,6 +494,7 @@ export function createCasesController({
 
   $("caseSearch").oninput = renderList;
   $("caseSuite").onchange = renderList;
+  $("caseResultFilter").onchange = renderList;
   $("selectVisibleCases").onchange = () => {
     for (const item of visibleCases()) {
       if ($("selectVisibleCases").checked) selected.add(item.id);
@@ -404,13 +506,36 @@ export function createCasesController({
     selected.clear();
     renderList();
   };
-  $("stopCases").onclick = () => {
+  $("stopCases").onclick = async () => {
+    if (!batch) return;
+    stopByUser = true;
     batch.stopRequested = true;
     updateControls();
     renderProgress();
+    try {
+      const value = await api("/lab/batches/" + batch.id + "/stop", "POST", {
+        reason: "user",
+      });
+      if (!executing) {
+        showBatch(value);
+        poll();
+      }
+    } catch (error) {
+      notify(error.message, true);
+    }
   };
-  $("runCases").onclick = async () => {
-    if (!initialized || sessionOpen || running() || !selected.size) return;
+  async function startBatch() {
+    if (
+      !initialized ||
+      sessionOpen ||
+      blocked ||
+      running() ||
+      viewingArchive ||
+      !selected.size
+    )
+      return;
+    $("replaceBatchNotice").hidden = true;
+    $("caseResultFilter").value = "all";
     let configuration;
     try {
       configuration = getConfiguration();
@@ -418,41 +543,92 @@ export function createCasesController({
       notify(error.message, true);
       return;
     }
-    batch = createCaseBatch(
-      catalog.filter((item) => selected.has(item.id)).map((item) => item.id),
-      configuration,
-    );
-    cache.clear();
-    feedbackDrafts.clear();
-    if (!selected.has(activeID)) activeID = batch.items[0].caseID;
-    detailKey = "";
-    onRunningChange(true);
+    executing = true;
+    stopByUser = false;
+    activityChanged();
+    updateControls();
     try {
+      batch = await api("/lab/batches", "POST", {
+        ...configuration,
+        caseIDs: catalog
+          .filter((item) => selected.has(item.id))
+          .map((item) => item.id),
+        source: "browser",
+        name: $("batchName").value,
+      });
+      archivePage = 1;
+      ownedCurrent = true;
+      viewingArchive = false;
+      remember();
+      cache.clear();
+      if (!selected.has(activeID)) activeID = batch.items[0].caseID;
+      detailKey = "";
       await executeCaseBatch(
         batch,
-        (id, body) =>
-          api(`/lab/cases/${encodeURIComponent(id)}/run`, "POST", {
-            ...body,
-            source: "browser",
-          }),
+        (id) =>
+          api(
+            `/lab/batches/${batch.id}/items/${encodeURIComponent(id)}/run`,
+            "POST",
+          ),
         () => {
           renderList();
           renderProgress();
           renderDetail();
         },
       );
+      if (batch.phase !== "completed")
+        await api("/lab/batches/" + batch.id + "/stop", "POST", {
+          reason: stopByUser ? "user" : "browser_closed",
+        });
+      batch = await api("/lab/batches/" + batch.id);
+      ownedCurrent = false;
+    } catch (error) {
+      notify("批次请求未完成，可从归档核对：" + error.message, true);
+      if (batch?.id && ownedCurrent) {
+        try {
+          batch = await api("/lab/batches/" + batch.id + "/stop", "POST", {
+            reason: "browser_closed",
+          });
+        } catch {}
+      }
     } finally {
-      onRunningChange(false);
-      updateControls();
+      executing = false;
+      activityChanged();
+      if (batch) {
+        const problem = batch.items.find(
+          (item) =>
+            item.state === "error" ||
+            [
+              "failed",
+              "execution_error",
+              "unexpected_input_rejection",
+              "unexpected_input_acceptance",
+            ].includes(item.report?.verdict),
+        );
+        if (problem) activeID = problem.caseID;
+        showBatch(batch, false);
+        poll();
+      } else updateControls();
+      refreshArchives().catch((error) => notify(error.message, true));
     }
+  }
+  $("runCases").onclick = () => {
+    if (batch && !running()) {
+      $("replaceBatchNotice").hidden = false;
+      $("replaceBatchNotice").scrollIntoView({ block: "nearest" });
+    } else startBatch();
+  };
+  $("replaceBatch").onclick = startBatch;
+  $("cancelReplaceBatch").onclick = () => {
+    $("replaceBatchNotice").hidden = true;
   };
   $("exportCases").onclick = () => {
-    if (!batch || running()) return;
+    if (!batch) return;
     const url = URL.createObjectURL(
       new Blob(
         [
           JSON.stringify(
-            { ...batch, cases: catalog.filter((item) => batchItem(item.id)) },
+            { ...batch, cases: batch.items.map((item) => item.case) },
             null,
             2,
           ),
@@ -466,23 +642,75 @@ export function createCasesController({
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
+  $("reloadBatches").onclick = () =>
+    refreshArchives().catch((error) => notify(error.message, true));
+  $("batchArchivePrev").onclick = () => {
+    archivePage--;
+    refreshArchives().catch((error) => notify(error.message, true));
+  };
+  $("batchArchiveNext").onclick = () => {
+    archivePage++;
+    refreshArchives().catch((error) => notify(error.message, true));
+  };
+  $("batchName").oninput = remember;
+  $("currentCaseLibrary").onclick = () => {
+    if (running()) return;
+    batch = null;
+    viewingArchive = false;
+    ownedCurrent = false;
+    clearTimeout(pollTimer);
+    $("caseResultFilter").value = "all";
+    detailKey = "";
+    renderList();
+    renderProgress();
+    remember();
+    $("caseDetail").replaceChildren(
+      node("p", "已返回当前用例库，选择用例准备新批次。", "hint"),
+    );
+  };
+  $("leaveArchive").onclick = () => $("currentCaseLibrary").click();
+  window.addEventListener("pagehide", () => {
+    if (executing && batch?.id) {
+      const data = new Blob([JSON.stringify({ reason: "browser_closed" })], {
+        type: "application/json",
+      });
+      navigator.sendBeacon("/lab/batches/" + batch.id + "/stop", data);
+    }
+  });
   return {
     noteFeedback(run) {
       if (cache.has(run.id)) cache.get(run.id).feedback = run.feedback;
-      if (
-        batchItem(activeID)?.report?.runID === run.id &&
-        !feedbackDrafts.has(run.id)
-      )
-        renderDetail(true);
-    },
-    setCatalog(items) {
-      catalog = items;
+      if (run.feedback) reviewed.add(run.id);
       renderList();
+    },
+    async setCatalog(items) {
+      catalog = items;
+      const ids = new Set(items.map((item) => item.id));
+      selected = new Set(
+        (Array.isArray(saved.selected) ? saved.selected : []).filter((id) =>
+          ids.has(id),
+        ),
+      );
+      activeID = ids.has(saved.activeID) ? saved.activeID : null;
+      renderList();
+      if (activeID) renderDetail();
+      if (typeof saved.batchID === "string") {
+        try {
+          await openArchive(saved.batchID, Boolean(saved.owned));
+        } catch (error) {
+          notify("无法恢复所选归档：" + error.message, true);
+        }
+      }
+      refreshArchives().catch((error) => notify(error.message, true));
     },
     sync(state) {
       initialized = state.initialized;
       sessionOpen = state.sessionOpen;
+      blocked = Boolean(state.blocked);
       updateControls();
+    },
+    configuration() {
+      return running() ? batch?.configuration || null : null;
     },
   };
 }

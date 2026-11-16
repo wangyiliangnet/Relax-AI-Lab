@@ -20,7 +20,7 @@ def load_cases():
     return cases
 
 
-async def execute_case(lab: Lab, case: dict, selection: CaseExecution):
+def input_report(case, selection):
     report = {
         "caseID": case["id"],
         "suite": case["suite"],
@@ -38,17 +38,14 @@ async def execute_case(lab: Lab, case: dict, selection: CaseExecution):
             verdict="expected_input_rejection" if input_error_expected else "unexpected_input_rejection",
             inputErrors=exc.errors(include_input=False, include_context=False, include_url=False),
         )
-        return report
+        return report, None
     if input_error_expected:
-        return {**report, "verdict": "unexpected_input_acceptance"}
-    try:
-        run = await lab.generate(
-            request, selection.options, selection.promptText, source=selection.source, case=case
-        )
-    except LabError as exc:
-        if exc.run_id is None:
-            raise
-        run = lab.store.run(exc.run_id)
+        return {**report, "verdict": "unexpected_input_acceptance"}, None
+    return report, request
+
+
+def report_for_run(case, selection, run):
+    report, _ = input_report(case, selection)
     report.update(
         runID=run["id"], serviceStatus=run["status"], serviceError=run["error"], promptHash=run["promptHash"]
     )
@@ -56,10 +53,25 @@ async def execute_case(lab: Lab, case: dict, selection: CaseExecution):
         report["verdict"] = "execution_error"
     else:
         report["issues"] = score_output(case, run)
-        if selection.options.provider == "mock":
-            report["verdict"] = "mock"
-        else:
-            report["verdict"] = "failed" if report["issues"] else "passed"
+        report["verdict"] = (
+            "mock" if selection.options.provider == "mock" else "failed" if report["issues"] else "passed"
+        )
+    return report
+
+
+async def execute_case(lab: Lab, case: dict, selection: CaseExecution, **generation):
+    report, request = input_report(case, selection)
+    if request is None:
+        return report
+    try:
+        run = await lab.generate(
+            request, selection.options, selection.promptText, source=selection.source, case=case, **generation
+        )
+    except LabError as exc:
+        if exc.run_id is None:
+            raise
+        run = lab.store.run(exc.run_id)
+    report = report_for_run(case, selection, run)
     run["caseEvaluation"] = report
     lab.store.save_run(run)
     return report

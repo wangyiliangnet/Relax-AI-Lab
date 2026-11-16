@@ -23,6 +23,7 @@ class Store:
         with self.connect() as db:
             db.execute("CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
             db.execute("CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, payload TEXT NOT NULL)")
+            db.execute("CREATE TABLE IF NOT EXISTS batches (id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
             db.execute(
                 "INSERT OR IGNORE INTO state VALUES ('profile', ?)",
                 (Profile(options=Options(provider=provider, model=model)).model_dump_json(),),
@@ -172,21 +173,155 @@ class Store:
     def recent_runs(self):
         with self.connect() as db:
             rows = db.execute("SELECT payload FROM runs ORDER BY rowid DESC LIMIT 100").fetchall()
-        keys = ("id", "createdAt", "status", "source", "options", "durationMs", "usage", "error", "feedback")
-        return [
-            {
-                **{key: run.get(key) for key in keys},
-                "cost": run.get("cost") or cost_for_run(run),
-                "goalTitle": run["input"]["goal"]["title"],
-                "goalID": run["input"]["goal"]["id"],
-                "validTaskCount": sum(
-                    len(plan["suggestions"]) for plan in (run.get("result") or {}).get("plans", [])
-                ),
-                "filteredCount": len(run.get("issues", [])),
-            }
-            for (payload,) in rows
-            if (run := json.loads(payload))
-        ]
+        return [self.run_summary(json.loads(payload)) for (payload,) in rows]
+
+    @staticmethod
+    def run_summary(run):
+        keys = (
+            "id",
+            "createdAt",
+            "status",
+            "source",
+            "options",
+            "durationMs",
+            "usage",
+            "error",
+            "feedback",
+            "promptEdited",
+            "promptHash",
+            "batchID",
+        )
+        return {
+            **{key: run.get(key) for key in keys},
+            "caseID": (run.get("case") or {}).get("id"),
+            "verdict": (run.get("caseEvaluation") or {}).get("verdict"),
+            "cost": run.get("cost") or cost_for_run(run),
+            "goalTitle": run["input"]["goal"]["title"],
+            "goalID": run["input"]["goal"]["id"],
+            "validTaskCount": sum(
+                len(plan["suggestions"]) for plan in (run.get("result") or {}).get("plans", [])
+            ),
+            "filteredCount": len(run.get("issues", [])),
+        }
+
+    def query_runs(
+        self,
+        page=1,
+        page_size=8,
+        query="",
+        status="all",
+        source="all",
+        provider=None,
+        prompt_version=None,
+        model=None,
+        prompt_hash=None,
+        case_id=None,
+        batch_id=None,
+    ):
+        clauses, values = [], []
+        if query:
+            fields = [
+                "$.input.goal.title",
+                "$.id",
+                "$.options.promptVersion",
+                "$.options.model",
+                "$.promptHash",
+                "$.case.id",
+                "$.batchID",
+            ]
+            clauses.append(
+                "("
+                + " OR ".join(
+                    f"instr(lower(coalesce(json_extract(payload, '{field}'), '')), lower(?)) > 0"
+                    for field in fields
+                )
+                + ")"
+            )
+            values.extend([query] * len(fields))
+        if status == "failed":
+            clauses.append("json_extract(payload, '$.status') IN ('failed','interrupted')")
+        elif status != "all":
+            clauses.append("json_extract(payload, '$.status') = ?")
+            values.append(status)
+        filters = {
+            "$.source": None if source == "all" else source,
+            "$.options.provider": provider,
+            "$.options.promptVersion": prompt_version,
+            "$.options.model": model,
+            "$.promptHash": prompt_hash,
+            "$.case.id": case_id,
+            "$.batchID": batch_id,
+        }
+        for path, value in filters.items():
+            if value is not None:
+                clauses.append(f"json_extract(payload, '{path}') = ?")
+                values.append(value)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        with self.connect() as db:
+            total = db.execute("SELECT count(*) FROM runs" + where, values).fetchone()[0]
+            pages = max(1, (total + page_size - 1) // page_size)
+            page = min(page, pages)
+            rows = db.execute(
+                "SELECT payload FROM runs" + where + " ORDER BY rowid DESC LIMIT ? OFFSET ?",
+                [*values, page_size, (page - 1) * page_size],
+            ).fetchall()
+        return {
+            "items": [self.run_summary(json.loads(payload)) for (payload,) in rows],
+            "total": total,
+            "page": page,
+            "pageSize": page_size,
+            "totalPages": pages,
+        }
+
+    def create_batch(self, batch):
+        with self.connect() as db:
+            db.execute(
+                "INSERT INTO batches VALUES (?,?)", (batch["id"], json.dumps(batch, ensure_ascii=False))
+            )
+
+    def batch(self, batch_id):
+        with self.connect() as db:
+            row = db.execute("SELECT payload FROM batches WHERE id=?", (batch_id,)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def update_batch(self, batch_id, mutate):
+        # Claims, stop requests and results merge against the latest row in one
+        # transaction. Never overwrite an in-flight stop with a stale snapshot.
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT payload FROM batches WHERE id=?", (batch_id,)).fetchone()
+            if row is None:
+                return None
+            batch = json.loads(row[0])
+            mutate(batch)
+            db.execute(
+                "UPDATE batches SET payload=? WHERE id=?", (json.dumps(batch, ensure_ascii=False), batch_id)
+            )
+            return batch
+
+    def batches(self, page=1, page_size=8):
+        with self.connect() as db:
+            total = db.execute("SELECT count(*) FROM batches").fetchone()[0]
+            pages = max(1, (total + page_size - 1) // page_size)
+            page = min(page, pages)
+            rows = db.execute(
+                "SELECT payload FROM batches ORDER BY rowid DESC LIMIT ? OFFSET ?",
+                (page_size, (page - 1) * page_size),
+            ).fetchall()
+        return {
+            "items": [json.loads(payload) for (payload,) in rows],
+            "total": total,
+            "page": page,
+            "pageSize": page_size,
+            "totalPages": pages,
+        }
+
+    def unfinished_batches(self):
+        with self.connect() as db:
+            rows = db.execute(
+                "SELECT payload FROM batches WHERE json_extract(payload, '$.phase') = 'running'"
+            ).fetchall()
+        return [json.loads(payload) for (payload,) in rows]
 
     def prompt(self, name: str) -> str:
         if not re.fullmatch(r"[a-zA-Z0-9_-]{1,80}", name):

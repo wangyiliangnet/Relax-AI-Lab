@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="system">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -16,780 +16,1017 @@
         </div></a
       >
       <div class="header-right">
-        <span id="navSessionState" class="badge" hidden></span
-        ><span id="connection" class="badge">连接中</span
-        ><a href="/docs" target="_blank" rel="noreferrer">OpenAPI ↗</a
-        ><label for="theme" class="sr-only">配色</label
-        ><select id="theme">
-          <option value="system">跟随系统</option>
-          <option value="light">GitHub Light</option>
-          <option value="dark">GitHub Dark</option>
-        </select>
+        <span id="navSessionState" class="badge" hidden></span>
+        <a
+          id="connection"
+          class="badge"
+          href="/deployment"
+          data-page-link="deployment"
+          >检查环境中</a
+        >
+        <a href="/docs" target="_blank" rel="noreferrer">OpenAPI ↗</a>
       </div>
     </header>
-    <nav class="site-nav" aria-label="主导航">
-      <a href="/deployment" data-page-link="deployment">项目部署</a
-      ><a href="/prompts" data-page-link="prompts">Prompt 与模型参数</a
-      ><a href="/cases" data-page-link="cases">用例评测</a
-      ><a href="/simulate" data-page-link="simulate">目标与任务模拟</a
-      ><a href="/history" data-page-link="history">历史与对比</a
-      ><a href="/costs" data-page-link="costs">AI 开支</a>
-    </nav>
-    <main class="shell">
-      <section
-        id="page-deployment"
-        class="page-view"
-        data-page="deployment"
-        hidden
-      >
-        <div class="page-heading">
-          <div>
-            <h1>项目部署</h1>
-            <p>启动服务并连接 iOS App。</p>
-          </div>
-          <span id="listenStatus" class="badge">读取监听配置中</span>
+    <div class="app-layout">
+      <nav class="site-nav" aria-label="主导航">
+        <span class="nav-group">实验台</span>
+        <a class="nav-child" href="/simulate" data-page-link="simulate"
+          >快速模拟</a
+        >
+        <a class="nav-child" href="/cases" data-page-link="cases">固定用例</a>
+        <a href="/prompts" data-page-link="prompts">Prompt 版本</a>
+        <a href="/history" data-page-link="history">记录与对比</a>
+        <a href="/costs" data-page-link="costs">开支</a>
+        <a
+          class="nav-environment"
+          href="/deployment"
+          data-page-link="deployment"
+          >连接与环境</a
+        >
+      </nav>
+      <main class="shell">
+        <div id="restoredNotice" class="notice" hidden>
+          <span
+            >已恢复本标签页的编辑草稿与选择。评测批次读取服务归档；不会恢复 App
+            会话或自动续跑。</span
+          >
+          <button id="dismissRestored" class="link-button" type="button">
+            收起
+          </button>
         </div>
-        <div class="deployment-grid">
-          <article class="box">
-            <div class="card-heading">
-              <span class="step-number">1</span>
-              <h2>启动服务</h2>
+        <section
+          id="trialConfiguration"
+          class="trial-configuration"
+          aria-label="当前试验配置"
+          hidden
+        >
+          <div class="configuration-line">
+            <span class="hint">当前试验配置</span>
+            <strong id="trialVersion"></strong
+            ><span id="trialDraft" class="badge draft-badge" hidden>草稿</span>
+            <span id="trialProvider" class="badge"></span
+            ><span id="trialModel"></span>
+            <a
+              href="/prompts"
+              data-page-link="prompts"
+              class="configuration-edit"
+              >修改配置 →</a
+            >
+          </div>
+          <div class="configuration-line">
+            <span id="trialScope" class="hint">仅用于本浏览器的后续实验</span>
+            <a
+              id="sharedDifferenceLink"
+              href="/prompts"
+              data-page-link="prompts"
+              >查看共享配置差异</a
+            >
+          </div>
+          <p id="providerNotice" class="hint"></p>
+        </section>
+        <div class="activity-bar" aria-label="服务活动">
+          <span id="activityText" role="status" aria-live="polite"
+            >读取服务状态中…</span
+          >
+          <a id="activityLink" href="/simulate" data-page-link="simulate" hidden
+            >返回活动 →</a
+          >
+          <button id="refreshHealth" class="link-button" type="button">
+            刷新状态
+          </button>
+        </div>
+        <section
+          id="page-deployment"
+          class="page-view"
+          data-page="deployment"
+          hidden
+        >
+          <div class="page-heading">
+            <div>
+              <h1>连接与环境</h1>
+              <p>启动服务并连接 iOS App。</p>
             </div>
-            <p class="hint">
-              首次部署将 .env.example 复制为 .env，填写
-              <code>DEEPSEEK_API_KEY</code>。
-            </p>
-            <pre>
+            <span id="listenStatus" class="badge">读取监听配置中</span>
+          </div>
+          <div class="deployment-grid">
+            <article class="box">
+              <div class="card-heading">
+                <span class="step-number">1</span>
+                <h2>启动服务</h2>
+              </div>
+              <p class="hint">
+                首次部署将 .env.example 复制为 .env，填写
+                <code>DEEPSEEK_API_KEY</code>。
+              </p>
+              <pre>
 uv sync --locked
 uv run python -m relax_ai_lab --host 0.0.0.0 --port 8765</pre
-            >
-            <p id="listenInfo" class="hint"></p>
-            <details class="small-details">
-              <summary>其他启动方式</summary>
-              <pre>./scripts/dev.sh --host 0.0.0.0</pre>
+              >
+              <p id="listenInfo" class="hint"></p>
+              <details class="small-details">
+                <summary>其他启动方式</summary>
+                <pre>./scripts/dev.sh --host 0.0.0.0</pre>
+                <p class="hint">
+                  也可通过 .env 的 LAB_HOST、LAB_PORT 配置监听地址与端口。
+                </p>
+              </details>
+            </article>
+            <article class="box">
+              <div class="card-heading">
+                <span class="step-number">2</span>
+                <h2>选择连接地址</h2>
+              </div>
+              <label for="lanAddress">部署电脑的局域网地址</label
+              ><select id="lanAddress"></select>
+              <p class="hint">选择手机所在网络的 Wi-Fi 或以太网地址。</p>
+              <div class="connection-check">
+                <span>健康检查</span
+                ><a id="healthURL" target="_blank" rel="noreferrer"></a>
+              </div>
               <p class="hint">
-                也可通过 .env 的 LAB_HOST、LAB_PORT 配置监听地址与端口。
+                用手机浏览器打开，返回 <code>status: ok</code> 即可继续。
               </p>
-            </details>
-          </article>
-          <article class="box">
-            <div class="card-heading">
-              <span class="step-number">2</span>
-              <h2>选择连接地址</h2>
-            </div>
-            <label for="lanAddress">部署电脑的局域网地址</label
-            ><select id="lanAddress"></select>
-            <p class="hint">选择手机所在网络的 Wi-Fi 或以太网地址。</p>
-            <div class="connection-check">
-              <span>健康检查</span
-              ><a id="healthURL" target="_blank" rel="noreferrer"></a>
-            </div>
-            <p class="hint">
-              用手机浏览器打开，返回 <code>status: ok</code> 即可继续。
-            </p>
-          </article>
-          <article class="box">
-            <div class="card-heading">
-              <span class="step-number">3</span>
-              <h2>配置 iOS</h2>
-            </div>
-            <p class="hint">
-              Xcode → Edit Scheme → Run → Arguments → Environment Variables
-            </p>
-            <label for="iosConfig">Run 环境变量</label
-            ><textarea id="iosConfig" class="code" rows="2" readonly></textarea
-            ><button id="copyIOSConfig" class="primary full">复制配置</button>
-            <p class="hint">使用 Relax / Local Debug，重新 Run 启动 App。</p>
-          </article>
-        </div>
-        <details class="box troubleshooting">
-          <summary>连接排查</summary>
-          <ul>
-            <li>
-              手机和部署电脑连接同一局域网，检查防火墙端口与 Wi-Fi 客户端隔离。
-            </li>
-            <li>真机填写电脑的局域网 IP；同机模拟器可使用 localhost。</li>
-            <li>
-              App 首次请求时允许“本地网络”权限；已拒绝时可在系统设置中开启。
-            </li>
-          </ul>
-        </details>
-      </section>
-
-      <section id="page-prompts" class="page-view" data-page="prompts" hidden>
-        <div class="page-heading">
-          <div>
-            <h1>Prompt 与模型参数</h1>
-            <p>编辑生成配置，保存可复用的 Prompt 版本。</p>
-          </div>
-          <div class="button-row compact-actions">
-            <a
-              class="button secondary"
-              href="/simulate"
-              data-page-link="simulate"
-              >模拟 App 流程</a
-            >
-            <a class="button primary" href="/cases" data-page-link="cases"
-              >用固定用例评测 →</a
-            >
-          </div>
-        </div>
-        <div id="promptLockNotice" class="notice" hidden></div>
-        <fieldset id="promptFields">
-          <div class="prompt-grid">
-            <article class="box prompt-editor">
-              <div class="box-heading">
-                <h2>业务 Prompt</h2>
-                <select id="promptVersion" aria-label="Prompt 版本"></select>
+            </article>
+            <article class="box">
+              <div class="card-heading">
+                <span class="step-number">3</span>
+                <h2>配置 iOS</h2>
               </div>
-              <label for="prompt" class="sr-only">业务提示词</label
+              <p class="hint">
+                Xcode → Edit Scheme → Run → Arguments → Environment Variables
+              </p>
+              <label for="iosConfig">Run 环境变量</label
               ><textarea
-                id="prompt"
-                class="code prompt-text"
-                rows="22"
-                spellcheck="false"
-              ></textarea>
-              <div class="version-row">
-                <div>
-                  <label for="versionName"
-                    >新版本 ID <code>promptVersion</code></label
-                  ><input
-                    id="versionName"
-                    placeholder="coach-v2"
-                    pattern="[a-zA-Z0-9_-]+"
-                  />
-                </div>
-                <button id="savePrompt" class="secondary">保存新版本</button>
-              </div>
-            </article>
-            <article class="box model-settings">
-              <div class="box-heading"><h2>模型参数</h2></div>
-              <label for="provider">调用实现 <code>provider</code></label
-              ><select id="provider">
-                <option value="mock">mock · 固定样例</option>
-                <option value="deepseek">
-                  deepseek · DeepSeek API
-                </option></select
-              ><label for="model">模型 ID <code>model</code></label
-              ><input
-                id="model"
-                value="deepseek-flash"
-                list="modelList"
-              /><datalist id="modelList">
-                <option value="deepseek-flash"></option>
-                <option value="deepseek-v4-pro"></option>
-              </datalist>
-              <div class="two">
-                <div>
-                  <label for="temperature"
-                    >采样温度 <code>temperature</code></label
-                  ><input
-                    id="temperature"
-                    type="number"
-                    min="0"
-                    max="2"
-                    step="0.1"
-                    value="0.7"
-                  />
-                </div>
-                <div>
-                  <label for="maxTokens">输出上限 <code>max_tokens</code></label
-                  ><input
-                    id="maxTokens"
-                    type="number"
-                    min="256"
-                    max="16384"
-                    step="256"
-                    value="8192"
-                  />
-                </div>
-              </div>
-              <div class="setting-facts">
-                <span>Thinking <code>disabled</code></span
-                ><span>Response <code>json_object</code></span>
-              </div>
-              <button id="preview" class="secondary full">预览完整请求</button>
-              <p id="previewGoal" class="hint"></p>
+                id="iosConfig"
+                class="code"
+                rows="2"
+                readonly
+              ></textarea
+              ><button id="copyIOSConfig" class="primary full">复制配置</button>
+              <p class="hint">使用 Relax / Local Debug，重新 Run 启动 App。</p>
             </article>
           </div>
-        </fieldset>
-        <div class="prompt-bottom-grid">
-          <article class="box">
-            <div class="box-heading"><h2>共享配置与模拟权益</h2></div>
+          <article class="box entitlement-settings">
+            <div class="box-heading"><h2>共享模拟权益</h2></div>
+            <p>Web 单目标模拟与 iOS 共用此账本；固定用例使用各自的模拟权益。</p>
             <fieldset id="profileFields">
               <div class="two">
                 <div>
-                  <label for="membership">会员 <code>isPro</code></label
-                  ><select id="membership">
-                    <option value="free">false · 免费用户</option>
-                    <option value="pro">true · Pro 用户</option>
+                  <label for="membership">模拟会员身份</label>
+                  <select id="membership">
+                    <option value="free">免费用户</option>
+                    <option value="pro">Pro 用户</option>
                   </select>
                 </div>
                 <div>
-                  <label for="usedCredits"
-                    >已用积分 <code>usedCredits</code></label
-                  ><input
+                  <label for="usedCredits">已用模拟积分</label>
+                  <input
                     id="usedCredits"
                     type="number"
                     min="0"
                     step="1"
                     value="0"
+                    required
                   />
                 </div>
               </div>
               <p id="creditInfo" class="hint"></p>
+              <p id="entitlementChanges" class="hint"></p>
               <div class="button-row">
-                <button id="applyProfile" class="primary">
-                  保存为服务共享配置</button
-                ><button id="reloadProfile" class="secondary">
-                  读取服务配置
+                <button id="applyEntitlement" class="primary">
+                  应用模拟权益
+                </button>
+                <button id="reloadEntitlement" class="secondary">
+                  重新读取模拟权益
                 </button>
               </div>
             </fieldset>
-            <p id="activeInfo" class="hint"></p>
-            <p class="hint">iOS 使用保存后的共享配置。</p>
+            <p class="hint">
+              仅修改模拟权益，不改变生成配置。模拟积分与人民币 token
+              费用分别管理。
+            </p>
           </article>
-          <details id="promptPreview" class="box request-preview">
-            <summary>完整请求预览</summary>
-            <div id="promptRequestJson">
-              <p class="hint">生成预览后显示最终请求体。</p>
-            </div>
+          <details class="box troubleshooting">
+            <summary>连接排查</summary>
+            <ul>
+              <li>
+                手机和部署电脑连接同一局域网，检查防火墙端口与 Wi-Fi
+                客户端隔离。
+              </li>
+              <li>真机填写电脑的局域网 IP；同机模拟器可使用 localhost。</li>
+              <li>
+                App 首次请求时允许“本地网络”权限；已拒绝时可在系统设置中开启。
+              </li>
+            </ul>
           </details>
-        </div>
-      </section>
-
-      <section id="page-cases" class="page-view" data-page="cases" hidden>
-        <div class="page-heading">
-          <div>
-            <h1>用例评测</h1>
-            <p>用同一份 Prompt 批量验证固定场景，逐条核对建议与断言。</p>
-          </div>
-          <div class="config-summary">
-            <span id="evaluationConfig"></span>
-            <a href="/prompts" data-page-link="prompts"
-              >修改 Prompt 与模型配置</a
-            >
-          </div>
-        </div>
-        <div id="evaluationSessionNotice" class="notice" hidden>
-          目标模拟会话进行中。<a href="/simulate" data-page-link="simulate"
-            >返回并关闭会话</a
-          >后即可运行评测，已选用例会保留。
-        </div>
-        <div class="evaluation-actionbar box">
-          <div>
-            <strong id="caseSelectionCount">选择要评测的用例</strong>
-            <p id="evaluationHint" class="hint">
-              可多选用例；每条使用自己的固定输入和模拟权益。
-            </p>
-          </div>
-          <div class="button-row compact-actions">
-            <button id="exportCases" class="secondary" disabled>
-              导出本批结果
-            </button>
-            <button id="stopCases" class="secondary" hidden>
-              停止后续用例
-            </button>
-            <button id="runCases" class="primary" disabled>运行所选用例</button>
-          </div>
-        </div>
-        <section
-          id="evaluationProgress"
-          class="box evaluation-progress"
-          aria-label="本批评测"
-          hidden
-        >
-          <div class="section-head">
-            <h2 id="batchHeading">本批评测</h2>
-            <span
-              id="batchProgressText"
-              class="hint"
-              role="status"
-              aria-live="polite"
-            ></span>
-          </div>
-          <p id="batchConfiguration" class="hint"></p>
-          <progress
-            id="batchProgress"
-            value="0"
-            max="1"
-            aria-label="已完成用例"
-          ></progress>
-          <div id="batchCounts" class="evaluation-counts"></div>
-          <p id="batchMessage" class="hint"></p>
         </section>
-        <div class="evaluation-layout">
-          <section class="box case-library" aria-label="用例库">
-            <div class="box-heading">
-              <h2>
-                用例库 <span id="caseCatalogCount" class="summary-meta"></span>
-              </h2>
-              <span class="hint">多选运行 · 点击名称预览</span>
-            </div>
-            <div class="case-filters">
-              <label class="sr-only" for="caseSearch">搜索用例</label>
-              <input
-                id="caseSearch"
-                type="search"
-                placeholder="搜索场景、目标或用例 ID"
-              />
-              <label class="sr-only" for="caseSuite">用例分组</label>
-              <select id="caseSuite">
-                <option value="all">全部分组</option>
-                <option value="main">主集</option>
-                <option value="holdout">历史留出组</option>
-              </select>
-            </div>
-            <div class="case-selection-tools">
-              <label
-                ><input
-                  id="selectVisibleCases"
-                  type="checkbox"
-                  disabled
-                />全选筛选结果</label
-              >
-              <button id="clearCases" class="link-button" disabled>
-                清空选择
-              </button>
-            </div>
-            <div id="caseList" class="case-list">
-              <p class="hint">正在加载用例…</p>
-            </div>
-          </section>
-          <article
-            id="caseDetail"
-            class="box case-detail"
-            aria-label="用例详情"
-          >
-            <div class="empty">
-              <h3>先看看要验证的场景</h3>
-              <p>点击用例名称查看固定输入与人工检查项，勾选后可批量运行。</p>
-            </div>
-          </article>
-        </div>
-      </section>
 
-      <section id="page-simulate" class="page-view" data-page="simulate" hidden>
-        <div class="page-heading">
-          <div>
-            <h1>目标与任务模拟</h1>
-            <p>
-              按 App 流程生成建议、选择任务并模拟添加。<a
-                href="/cases"
-                data-page-link="cases"
-                >批量验证 Prompt →</a
-              >
-            </p>
-          </div>
-          <div class="config-summary">
-            <span id="simulationConfig"></span
-            ><a href="/prompts" data-page-link="prompts">修改配置</a>
-          </div>
-        </div>
-        <div id="simulationEvaluationNotice" class="notice" hidden>
-          用例评测正在运行，完成或停止后可打开模拟会话。<a
-            href="/cases"
-            data-page-link="cases"
-            >查看评测进度 →</a
-          >
-        </div>
-        <div class="simulation-actionbar">
-          <div class="session-controls">
-            <button id="openSession" class="primary" disabled>
-              打开 AI 任务灵感</button
-            ><button id="refreshSession" class="secondary" hidden>换一批</button
-            ><button id="retrySession" class="secondary" hidden>重试生成</button
-            ><button id="closeSession" class="secondary" hidden>
-              关闭会话
-            </button>
-          </div>
-          <span id="sessionPhase" class="badge" data-phase="closed"
-            >未打开会话</span
-          >
-        </div>
-        <div class="simulation-grid">
-          <aside class="box goal-card">
-            <div class="box-heading">
-              <h2>目标数据</h2>
-              <select id="examples" aria-label="载入目标示例">
-                <option value="">载入示例</option>
-              </select>
+        <section id="page-prompts" class="page-view" data-page="prompts" hidden>
+          <div class="page-heading">
+            <div>
+              <h1>Prompt 版本</h1>
+              <p>编辑生成配置，保存可复用的 Prompt 版本。</p>
             </div>
-            <fieldset id="goalFields">
-              <label for="title">目标标题 <code>goal.title</code></label
-              ><input
-                id="title"
-                required
-                maxlength="500"
-                value="三个月后能够进行十分钟的英语日常对话"
-              /><label for="note">目标备注 <code>goal.note</code></label
-              ><textarea id="note" rows="4">
-目前能读简单句子，工作日每天有 20 分钟。重点是开口表达，不备考。</textarea
+            <div class="button-row compact-actions">
+              <a
+                class="button secondary"
+                href="/simulate"
+                data-page-link="simulate"
+                >快速模拟</a
               >
-              <div class="two">
-                <div>
-                  <label for="start">开始日期 <code>startDate</code></label
-                  ><input id="start" type="date" />
+              <a class="button primary" href="/cases" data-page-link="cases"
+                >用固定用例评测 →</a
+              >
+            </div>
+          </div>
+          <a
+            id="returnToExperiment"
+            class="return-link"
+            href="/simulate"
+            data-page-link="simulate"
+            >返回快速模拟 →</a
+          >
+          <div id="promptLockNotice" class="notice" hidden></div>
+          <fieldset id="promptFields">
+            <div class="prompt-grid">
+              <article class="box prompt-editor">
+                <div class="box-heading">
+                  <h2>业务 Prompt</h2>
+                  <select id="promptVersion" aria-label="Prompt 版本"></select>
                 </div>
-                <div>
-                  <label for="deadline">截止日期 <code>deadline</code></label
-                  ><input id="deadline" type="date" />
-                </div>
-              </div>
-              <label for="locale">App 当前语言 <code>locale</code></label
-              ><select id="locale">
-                <option value="zh-Hans">zh-Hans · 简体中文</option>
-                <option value="zh-Hant">zh-Hant · 繁體中文</option>
-                <option value="en">en · English</option>
-              </select>
-              <p class="hint">对应 App 当前界面语言。</p>
-              <details class="small-details">
-                <summary>目标 ID</summary>
-                <label for="goalID" class="sr-only">目标 ID</label
-                ><input id="goalID" class="code" readonly />
-              </details>
-              <div class="button-row">
-                <button id="newGoal" class="secondary">新建目标</button
-                ><button id="resetTasks" class="secondary" disabled>
-                  清空任务
-                </button>
-              </div>
-            </fieldset>
-          </aside>
-          <div class="workspace">
-            <article class="box simulator-card">
-              <div class="workflow-heading">
-                <div>
-                  <span class="section-label">AI 任务灵感</span>
-                  <h2 id="goalSummary"></h2>
-                </div>
-                <span id="goalTaskCount" class="badge">0 条任务</span>
-              </div>
-              <ol class="flow-steps" aria-label="操作流程">
-                <li data-step="0"><span>1</span>准备目标</li>
-                <li data-step="1"><span>2</span>生成建议</li>
-                <li data-step="2"><span>3</span>选择任务</li>
-                <li data-step="3"><span>4</span>添加到目标</li>
-              </ol>
-              <div id="sessionInfo" class="hint"></div>
-              <div id="cards" class="session-view">
-                <div id="sessionCards"></div>
-                <div id="selectionBar" class="selection-bar" hidden>
-                  <button id="selectAll" class="link-button">
-                    全选 / 取消全选</button
-                  ><span id="selectedCount"></span
-                  ><button id="addSelected" class="primary">模拟添加</button>
-                </div>
-              </div>
-            </article>
-            <section id="currentReport" class="box current-report" hidden>
-              <div class="box-heading">
-                <div>
-                  <h2>本次生成</h2>
-                  <span id="diagnosticMeta" class="summary-meta"></span>
-                </div>
-                <div class="button-row compact-actions">
-                  <button id="viewCurrentInHistory" class="link-button">
-                    在历史中查看</button
-                  ><button id="export" class="secondary" disabled>
-                    导出 JSON
+                <label for="prompt" class="sr-only">业务提示词</label
+                ><textarea
+                  id="prompt"
+                  class="code prompt-text"
+                  rows="22"
+                  spellcheck="false"
+                ></textarea>
+                <div class="draft-actions button-row">
+                  <span id="draftState" class="hint"></span>
+                  <button id="discardDraft" class="link-button" type="button">
+                    放弃此草稿
+                  </button>
+                  <button
+                    id="restoreDraft"
+                    class="link-button"
+                    type="button"
+                    hidden
+                  >
+                    恢复本版本草稿
                   </button>
                 </div>
-              </div>
-              <p id="runInfo" class="hint"></p>
-              <div id="metrics" class="metrics"></div>
-              <div class="assessment-grid">
-                <section>
-                  <h3>参数校验</h3>
-                  <div id="issues"></div>
-                </section>
-                <section class="review">
-                  <h3>人工评价</h3>
-                  <label for="rating">评价</label
-                  ><select id="rating">
-                    <option value="good">good · 可用</option>
-                    <option value="needs_work">needs_work · 需调整</option>
-                    <option value="bad">bad · 不可用</option></select
-                  ><label for="reviewNote">备注</label
-                  ><textarea id="reviewNote" rows="3"></textarea
-                  ><button id="saveFeedback" class="secondary">保存评价</button>
-                </section>
-              </div>
-              <details class="record-trace">
-                <summary>请求与响应</summary>
-                <details class="json-section">
-                  <summary>请求上下文</summary>
-                  <div id="requestContextJson"></div>
-                </details>
-                <details class="json-section">
-                  <summary>发送给模型的请求</summary>
-                  <div id="requestJson"></div>
-                </details>
-                <details class="json-section" open>
-                  <summary>模型生成内容</summary>
-                  <div id="rawContentJson"></div>
-                </details>
-                <details class="json-section">
-                  <summary>返回 App 的响应</summary>
-                  <div id="resultJson"></div>
-                </details>
-                <details class="json-section">
-                  <summary>完整上游响应</summary>
-                  <div id="rawJson"></div>
-                </details>
-                <details class="json-section">
-                  <summary>费用与单价快照</summary>
-                  <div id="costJson"></div>
-                </details>
-              </details>
-            </section>
-            <details class="box small-details request-state">
-              <summary>会话请求参数</summary>
-              <div class="two">
-                <div>
-                  <label for="mode">生成模式 <code>generationMode</code></label
-                  ><input id="mode" readonly />
+                <div class="version-row">
+                  <div>
+                    <label for="versionName"
+                      >新版本 ID <code>promptVersion</code></label
+                    ><input
+                      id="versionName"
+                      placeholder="coach-v2"
+                      pattern="[a-zA-Z0-9_-]+"
+                      maxlength="80"
+                      required
+                    />
+                  </div>
+                  <button id="savePrompt" class="primary">保存新版本</button>
                 </div>
-                <div>
-                  <label for="today">请求日期 <code>today</code></label
-                  ><input id="today" readonly />
+              </article>
+              <article class="box model-settings">
+                <div class="box-heading"><h2>模型参数</h2></div>
+                <label for="provider">调用实现 <code>provider</code></label
+                ><select id="provider">
+                  <option value="mock">mock · 固定样例</option>
+                  <option value="deepseek">
+                    deepseek · DeepSeek API
+                  </option></select
+                ><label for="model">模型 ID <code>model</code></label
+                ><input
+                  id="model"
+                  value="deepseek-flash"
+                  list="modelList"
+                  pattern="[a-zA-Z0-9._-]{1,100}"
+                  required
+                /><datalist id="modelList">
+                  <option value="deepseek-flash"></option>
+                  <option value="deepseek-v4-pro"></option>
+                </datalist>
+                <div class="two">
+                  <div>
+                    <label for="temperature"
+                      >采样温度 <code>temperature</code></label
+                    ><input
+                      id="temperature"
+                      type="number"
+                      required
+                      min="0"
+                      max="2"
+                      step="0.1"
+                      value="0.7"
+                    />
+                  </div>
+                  <div>
+                    <label for="maxTokens"
+                      >输出上限 <code>max_tokens</code></label
+                    ><input
+                      id="maxTokens"
+                      type="number"
+                      required
+                      min="256"
+                      max="16384"
+                      step="256"
+                      value="8192"
+                    />
+                  </div>
                 </div>
+                <div class="setting-facts">
+                  <span>Thinking <code>disabled</code></span
+                  ><span>Response <code>json_object</code></span>
+                </div>
+                <button id="preview" class="secondary full">
+                  预览完整请求
+                </button>
+                <p id="previewGoal" class="hint"></p>
+                <a
+                  id="editPreviewGoal"
+                  href="/simulate"
+                  data-page-link="simulate"
+                  >编辑预览目标后返回 →</a
+                >
+              </article>
+            </div>
+          </fieldset>
+          <div class="prompt-bottom-grid">
+            <article class="box shared-configuration">
+              <div class="box-heading"><h2>服务共享生成配置</h2></div>
+              <p id="activeInfo" class="hint"></p>
+              <p>影响后续 iOS 请求；保存 Prompt 版本不会自动应用。</p>
+              <div id="configurationDifferences"></div>
+              <p id="applyHint" class="hint"></p>
+              <div class="button-row">
+                <button id="applyProfile" class="primary" disabled>
+                  应用生成配置到共享服务
+                </button>
+                <button id="reloadProfile" class="secondary">
+                  刷新共享配置
+                </button>
+                <button id="replaceWithShared" class="link-button">
+                  用共享配置替换当前试验配置
+                </button>
               </div>
-              <label for="existing"
-                >目标任务标题 <code>existingTaskTitles</code></label
-              ><textarea id="existing" rows="2" readonly></textarea
-              ><label for="excluded"
-                >已展示标题 <code>excludedSuggestionTitles</code></label
-              ><textarea id="excluded" rows="3" readonly></textarea>
+              <p class="hint">
+                仅应用生成配置，不修改模拟会员或积分。
+                <a href="/deployment" data-page-link="deployment"
+                  >设置模拟权益 →</a
+                >
+              </p>
+            </article>
+            <details id="promptPreview" class="box request-preview">
+              <summary>完整请求预览</summary>
+              <div id="promptRequestJson">
+                <p class="hint">生成预览后显示最终请求体。</p>
+              </div>
             </details>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section id="page-history" class="page-view" data-page="history" hidden>
-        <div class="page-heading">
-          <div>
-            <h1>历史与对比</h1>
-            <p>浏览生成记录，选择两次实验比较结果。</p>
+        <section id="page-cases" class="page-view" data-page="cases" hidden>
+          <div class="page-heading">
+            <div>
+              <h1>固定用例</h1>
+              <p>用同一份 Prompt 批量验证固定场景，逐条核对建议与断言。</p>
+            </div>
+            <div class="config-summary">
+              <span id="evaluationConfig"></span>
+              <a href="/prompts" data-page-link="prompts"
+                >修改 Prompt 与模型配置</a
+              >
+            </div>
           </div>
-          <div class="segmented-control history-view-switch">
-            <button id="historyBrowseTab" aria-pressed="true">浏览记录</button
-            ><button id="historyCompareTab" aria-pressed="false">
-              对比实验 <span id="compareSelectionInfo">0 / 2</span>
-            </button>
+          <div id="evaluationSessionNotice" class="notice" hidden>
+            目标模拟会话进行中。<a href="/simulate" data-page-link="simulate"
+              >返回并关闭会话</a
+            >后即可运行评测，已选用例会保留。
           </div>
-        </div>
-        <div id="historyBrowse">
-          <div class="history-filters">
-            <label for="historySearch" class="sr-only">搜索记录</label
-            ><input
-              id="historySearch"
-              type="search"
-              placeholder="搜索目标、Prompt 版本或模型"
-            /><label for="historyStatus" class="sr-only">状态</label
-            ><select id="historyStatus">
-              <option value="all">全部状态</option>
-              <option value="success">成功</option>
-              <option value="failed">失败 / 中断</option>
-              <option value="running">生成中</option></select
-            ><label for="historySource" class="sr-only">来源</label
-            ><select id="historySource">
-              <option value="all">全部来源</option>
-              <option value="browser">Web</option>
-              <option value="agent">Agent</option>
-              <option value="ios">iOS</option>
-            </select>
+          <div class="evaluation-actionbar box">
+            <div>
+              <strong id="caseSelectionCount">选择要评测的用例</strong>
+              <p id="evaluationHint" class="hint">
+                可多选用例；每条使用自己的固定输入和模拟权益。
+              </p>
+            </div>
+            <div class="button-row compact-actions">
+              <button id="exportCases" class="secondary" disabled>
+                导出本批结果
+              </button>
+              <button id="stopCases" class="secondary" hidden>
+                停止后续用例
+              </button>
+              <button id="runCases" class="primary" disabled>
+                运行所选用例
+              </button>
+            </div>
           </div>
-          <div class="history-layout">
-            <aside class="box history-list-card">
+          <div class="batch-name-field">
+            <label for="batchName">批次名称（选填）</label>
+            <input
+              id="batchName"
+              maxlength="120"
+              placeholder="例如：日期节奏修订验证"
+            />
+          </div>
+          <details id="batchArchive" class="box batch-archive">
+            <summary>评测批次归档</summary>
+            <div class="button-row">
+              <button id="reloadBatches" class="secondary">刷新归档</button>
+              <button id="currentCaseLibrary" class="secondary">
+                返回当前用例库
+              </button>
+            </div>
+            <p id="batchArchiveStatus" class="hint" role="status"></p>
+            <div id="batchArchiveList"></div>
+            <div class="history-pagination">
+              <button id="batchArchivePrev" class="secondary">上一页</button>
+              <span id="batchArchivePage" class="hint"></span>
+              <button id="batchArchiveNext" class="secondary">下一页</button>
+            </div>
+          </details>
+          <p id="archiveViewNotice" class="notice" hidden></p>
+          <button id="leaveArchive" class="secondary return-link" hidden>
+            返回当前用例库
+          </button>
+          <div id="replaceBatchNotice" class="notice" hidden>
+            <p>
+              新批次会切换当前视图；旧批次和调用均已归档，可随时重新打开或导出。
+            </p>
+            <div class="button-row">
+              <button id="replaceBatch" class="primary">开始新批次</button>
+              <button id="cancelReplaceBatch" class="secondary">
+                保留当前批次
+              </button>
+            </div>
+          </div>
+          <section
+            id="evaluationProgress"
+            class="box evaluation-progress"
+            aria-label="本批评测"
+            hidden
+          >
+            <div class="section-head">
+              <h2 id="batchHeading">本批评测</h2>
+              <span
+                id="batchProgressText"
+                class="hint"
+                role="status"
+                aria-live="polite"
+              ></span>
+            </div>
+            <p id="batchConfiguration" class="hint"></p>
+            <progress
+              id="batchProgress"
+              value="0"
+              max="1"
+              aria-label="已完成用例"
+            ></progress>
+            <div id="batchCounts" class="evaluation-counts"></div>
+            <p id="batchMessage" class="hint"></p>
+          </section>
+          <div class="evaluation-layout">
+            <section class="box case-library" aria-label="用例库">
               <div class="box-heading">
-                <div>
-                  <h2>最近记录</h2>
-                  <span id="historyCount" class="summary-meta"></span>
-                </div>
-                <button id="reloadHistory" class="link-button">刷新</button>
+                <h2>
+                  用例库
+                  <span id="caseCatalogCount" class="summary-meta"></span>
+                </h2>
+                <span class="hint">多选运行 · 点击名称预览</span>
               </div>
-              <div id="historyList"></div>
-              <div class="history-pagination">
-                <button id="historyPrev" class="secondary">上一页</button
-                ><span id="historyPage" class="hint"></span
-                ><button id="historyNext" class="secondary">下一页</button>
+              <div class="case-filters">
+                <label class="sr-only" for="caseSearch">搜索用例</label>
+                <input
+                  id="caseSearch"
+                  type="search"
+                  placeholder="搜索场景、目标或用例 ID"
+                />
+                <label class="sr-only" for="caseSuite">用例分组</label>
+                <select id="caseSuite">
+                  <option value="all">全部分组</option>
+                  <option value="main">主集</option>
+                  <option value="holdout">历史留出组</option>
+                </select>
               </div>
-            </aside>
-            <article id="historyDetail" class="box history-detail">
+              <div class="case-result-filter">
+                <label for="caseResultFilter">本批结果</label>
+                <select id="caseResultFilter">
+                  <option value="all">全部结果</option>
+                  <option value="failed">断言失败</option>
+                  <option value="errors">执行错误</option>
+                  <option value="skipped">未执行</option>
+                  <option value="unreviewed">待人工评价</option>
+                </select>
+              </div>
+              <div class="case-selection-tools">
+                <label
+                  ><input
+                    id="selectVisibleCases"
+                    type="checkbox"
+                    disabled
+                  />全选筛选结果</label
+                >
+                <button id="clearCases" class="link-button" disabled>
+                  清空选择
+                </button>
+              </div>
+              <div id="caseList" class="case-list">
+                <p class="hint">正在加载用例…</p>
+              </div>
+            </section>
+            <article
+              id="caseDetail"
+              class="box case-detail"
+              aria-label="用例详情"
+            >
               <div class="empty">
-                <h3>选择一条记录</h3>
-                <p>查看任务、请求和评价。</p>
+                <h3>先看看要验证的场景</h3>
+                <p>点击用例名称查看固定输入与人工检查项，勾选后可批量运行。</p>
               </div>
             </article>
           </div>
-        </div>
-        <div id="historyCompare" hidden>
-          <section class="box compare-setup">
-            <div class="two">
-              <div>
-                <label for="compareA">实验 A</label
-                ><select id="compareA"></select>
-              </div>
-              <div>
-                <label for="compareB">实验 B</label
-                ><select id="compareB"></select>
-              </div>
+        </section>
+
+        <section
+          id="page-simulate"
+          class="page-view"
+          data-page="simulate"
+          hidden
+        >
+          <div class="page-heading">
+            <div>
+              <h1>快速模拟</h1>
+              <p>
+                按 App 流程生成建议、选择任务并模拟添加。<a
+                  href="/cases"
+                  data-page-link="cases"
+                  >批量验证 Prompt →</a
+                >
+              </p>
             </div>
-            <div class="button-row">
-              <button id="compare" class="primary" disabled>开始对比</button
-              ><button id="clearCompare" class="secondary">清空选择</button>
+            <div class="config-summary">
+              <span id="simulationConfig"></span
+              ><a href="/prompts" data-page-link="prompts">修改配置</a>
             </div>
-          </section>
-          <div id="comparison" class="comparison"></div>
-        </div>
-      </section>
-      <section id="page-costs" class="page-view" data-page="costs" hidden>
-        <div class="page-heading">
-          <div>
-            <h1>AI 开支</h1>
-            <p>按 Provider、Prompt 版本与模型统计全部调用。</p>
           </div>
-          <button id="reloadCosts" class="secondary">刷新统计</button>
-        </div>
-        <p id="costLoadState" class="hint" role="status"></p>
-        <div id="costMetrics" class="metrics cost-metrics"></div>
-        <p id="costCoverage" class="hint"></p>
-        <article class="box">
-          <div class="box-heading"><h2>版本费用汇总</h2></div>
-          <p class="hint">
-            同一版本的不同 Prompt
-            指纹和草稿分别统计。模型返回用量后，即使建议校验失败也计入费用。
-          </p>
-          <div
-            class="cost-table-scroll"
-            tabindex="0"
-            role="region"
-            aria-label="版本费用汇总表，可横向滚动"
-          >
-            <table class="cost-table">
-              <thead>
-                <tr>
-                  <th scope="col">Provider</th>
-                  <th scope="col">Prompt / 指纹</th>
-                  <th scope="col">模型</th>
-                  <th scope="col">单价时段</th>
-                  <th scope="col">调用数</th>
-                  <th scope="col">输入 / 输出 tokens</th>
-                  <th scope="col">已知估算 · CNY</th>
-                  <th scope="col">估算 / 未计费 / 未知 / 进行中</th>
-                </tr>
-              </thead>
-              <tbody id="costRows"></tbody>
-            </table>
-          </div>
-          <p id="costEmpty" class="empty">
-            暂无调用记录。生成后在这里查看费用。
-          </p>
-        </article>
-        <article class="box cost-pricing">
-          <div class="box-heading">
-            <h2>调用单价</h2>
-            <a
-              href="https://api-docs.deepseek.com/zh-cn/quick_start/pricing"
-              target="_blank"
-              rel="noreferrer"
-              >DeepSeek 官方价格 ↗</a
+          <div id="simulationEvaluationNotice" class="notice" hidden>
+            用例评测正在运行，完成或停止后可打开模拟会话。<a
+              href="/cases"
+              data-page-link="cases"
+              >查看评测进度 →</a
             >
           </div>
-          <p class="hint">
-            内置 DeepSeek 高峰期、DeepSeek 空闲时段、全时段三种单价版本。Flash
-            和 Pro 已内置官方高峰/空闲价格（2026-11-07
-            核对），按调用开始的北京时间及中国节假日日历自动选择。单位为元 /
-            百万 tokens。
-          </p>
-          <p id="pricingSchedule" class="hint" role="status"></p>
-          <div id="pricingRules"></div>
-          <p class="hint">
-            内置及自定义价格均可删除，刷新或重启后保持删除。删除仅影响后续调用，历史费用快照保留；无其他匹配价格时费用为未知。可在下方重新填写并保存价格。
-          </p>
-          <form id="pricingForm">
-            <div class="two">
-              <div>
-                <label for="priceModel">DeepSeek 模型 ID</label
-                ><input
-                  id="priceModel"
-                  list="modelList"
-                  value="deepseek-flash"
-                  pattern="[a-zA-Z0-9._-]{1,100}"
-                  required
-                />
-              </div>
-              <div>
-                <label for="pricePeriod">单价版本</label
-                ><select id="pricePeriod">
-                  <option value="deepseek_peak">DeepSeek 高峰期</option>
-                  <option value="deepseek_off_peak">DeepSeek 空闲时段</option>
-                  <option value="all_day">全时段</option>
+          <a
+            id="returnToPrompt"
+            class="return-link"
+            href="/prompts"
+            data-page-link="prompts"
+            hidden
+            >返回 Prompt 请求预览 →</a
+          >
+          <div id="goalError" class="error-box" role="alert" hidden></div>
+          <div class="simulation-actionbar">
+            <div class="session-controls">
+              <button id="openSession" class="primary" disabled>
+                打开 AI 任务灵感</button
+              ><button id="refreshSession" class="secondary" hidden>
+                换一批</button
+              ><button id="retrySession" class="secondary" hidden>
+                重试生成</button
+              ><button id="closeSession" class="secondary" hidden>
+                关闭会话
+              </button>
+            </div>
+            <span id="sessionPhase" class="badge" data-phase="closed"
+              >未打开会话</span
+            >
+          </div>
+          <div class="simulation-grid">
+            <aside class="box goal-card">
+              <div class="box-heading">
+                <h2>目标数据</h2>
+                <select id="examples" aria-label="载入目标示例">
+                  <option value="">载入示例</option>
                 </select>
               </div>
+              <fieldset id="goalFields">
+                <label for="title">目标标题 <code>goal.title</code></label
+                ><input
+                  id="title"
+                  required
+                  maxlength="500"
+                  value="三个月后能够进行十分钟的英语日常对话"
+                /><label for="note">目标备注 <code>goal.note</code></label
+                ><textarea id="note" rows="4">
+目前能读简单句子，工作日每天有 20 分钟。重点是开口表达，不备考。</textarea
+                >
+                <div class="two">
+                  <div>
+                    <label for="start">开始日期 <code>startDate</code></label
+                    ><input id="start" type="date" />
+                  </div>
+                  <div>
+                    <label for="deadline">截止日期 <code>deadline</code></label
+                    ><input id="deadline" type="date" />
+                  </div>
+                </div>
+                <label for="locale">App 当前语言 <code>locale</code></label
+                ><select id="locale">
+                  <option value="zh-Hans">zh-Hans · 简体中文</option>
+                  <option value="zh-Hant">zh-Hant · 繁體中文</option>
+                  <option value="en">en · English</option>
+                </select>
+                <p class="hint">对应 App 当前界面语言。</p>
+                <details class="small-details">
+                  <summary>目标 ID</summary>
+                  <label for="goalID" class="sr-only">目标 ID</label
+                  ><input id="goalID" class="code" readonly />
+                </details>
+                <div class="button-row">
+                  <button id="newGoal" class="secondary">新建目标</button
+                  ><button id="resetTasks" class="secondary" disabled>
+                    清空任务
+                  </button>
+                </div>
+              </fieldset>
+            </aside>
+            <div class="workspace">
+              <article class="box simulator-card">
+                <div class="workflow-heading">
+                  <div>
+                    <span class="section-label">AI 任务灵感</span>
+                    <h2 id="goalSummary"></h2>
+                  </div>
+                  <span id="goalTaskCount" class="badge">0 条任务</span>
+                </div>
+                <ol class="flow-steps" aria-label="操作流程">
+                  <li data-step="0"><span>1</span>准备目标</li>
+                  <li data-step="1"><span>2</span>生成建议</li>
+                  <li data-step="2"><span>3</span>选择任务</li>
+                  <li data-step="3"><span>4</span>添加到目标</li>
+                </ol>
+                <div id="sessionInfo" class="hint"></div>
+                <p class="hint simulation-scope">
+                  模拟添加只写入本页面的目标，不会保存到 App。
+                </p>
+                <div id="cards" class="session-view">
+                  <div id="sessionCards"></div>
+                  <div id="selectionBar" class="selection-bar" hidden>
+                    <button id="selectAll" class="link-button">
+                      全选 / 取消全选</button
+                    ><span id="selectedCount"></span
+                    ><button id="addSelected" class="primary">模拟添加</button>
+                  </div>
+                </div>
+              </article>
+              <section id="currentReport" class="box current-report" hidden>
+                <div class="box-heading">
+                  <h2>本次结果</h2>
+                  <button id="viewCurrentInHistory" class="link-button">
+                    在记录中查看 →
+                  </button>
+                </div>
+                <div id="currentResult"></div>
+              </section>
+              <details class="box small-details request-state">
+                <summary>会话请求参数</summary>
+                <div class="two">
+                  <div>
+                    <label for="mode"
+                      >生成模式 <code>generationMode</code></label
+                    ><input id="mode" readonly />
+                  </div>
+                  <div>
+                    <label for="today">请求日期 <code>today</code></label
+                    ><input id="today" readonly />
+                  </div>
+                </div>
+                <label for="existing"
+                  >目标任务标题 <code>existingTaskTitles</code></label
+                ><textarea id="existing" rows="2" readonly></textarea
+                ><label for="excluded"
+                  >已展示标题 <code>excludedSuggestionTitles</code></label
+                ><textarea id="excluded" rows="3" readonly></textarea>
+              </details>
             </div>
+          </div>
+        </section>
+
+        <section id="page-history" class="page-view" data-page="history" hidden>
+          <div class="page-heading">
             <div>
-              <label for="priceLabel">价格标签</label
+              <h1>记录与对比</h1>
+              <p>
+                服务端检索全部调用，每页展示 8
+                条；支持单次运行或按用例配对的批次对比。
+              </p>
+            </div>
+            <div class="segmented-control history-view-switch">
+              <button id="historyBrowseTab" aria-pressed="true">浏览记录</button
+              ><button id="historyCompareTab" aria-pressed="false">
+                对比实验 <span id="compareSelectionInfo">0 / 2</span>
+              </button>
+              <button id="historyBatchTab" aria-pressed="false">
+                批次对比
+              </button>
+            </div>
+          </div>
+          <div id="historyBrowse">
+            <div class="history-filters">
+              <label for="historySearch" class="sr-only">搜索记录</label
               ><input
-                id="priceLabel"
-                placeholder="例如：2026-11-07 官方价格"
-                maxlength="120"
-                required
-              />
+                id="historySearch"
+                type="search"
+                placeholder="搜索目标、Prompt 版本或模型"
+              /><label for="historyStatus" class="sr-only">状态</label
+              ><select id="historyStatus">
+                <option value="all">全部状态</option>
+                <option value="success">成功</option>
+                <option value="failed">失败 / 中断</option>
+                <option value="running">生成中</option></select
+              ><label for="historySource" class="sr-only">来源</label
+              ><select id="historySource">
+                <option value="all">全部来源</option>
+                <option value="browser">Web</option>
+                <option value="agent">Agent</option>
+                <option value="ios">iOS</option>
+              </select>
             </div>
-            <div class="price-inputs">
-              <div>
-                <label for="priceHit">输入 · 缓存命中</label
-                ><input
-                  id="priceHit"
-                  type="number"
-                  min="0"
-                  max="1000000"
-                  step="0.00000001"
-                  required
-                />
+            <details class="history-advanced">
+              <summary>更多筛选</summary>
+              <div class="history-extra-filters">
+                <label
+                  >调用方式<select id="historyProvider">
+                    <option value="all">全部</option>
+                    <option value="mock">Mock</option>
+                    <option value="deepseek">DeepSeek</option>
+                  </select></label
+                >
+                <label
+                  >用例 ID<input id="historyCaseID" placeholder="例如 vocab"
+                /></label>
+                <label
+                  >批次 ID<input id="historyBatchID" placeholder="完整批次 ID"
+                /></label>
               </div>
-              <div>
-                <label for="priceMiss">输入 · 缓存未命中</label
-                ><input
-                  id="priceMiss"
-                  type="number"
-                  min="0"
-                  max="1000000"
-                  step="0.00000001"
-                  required
-                />
-              </div>
-              <div>
-                <label for="priceOutput">输出</label
-                ><input
-                  id="priceOutput"
-                  type="number"
-                  min="0"
-                  max="1000000"
-                  step="0.00000001"
-                  required
-                />
-              </div>
+            </details>
+            <p id="historyLoadState" class="hint" role="status"></p>
+            <div class="history-layout">
+              <aside class="box history-list-card">
+                <div class="box-heading">
+                  <div>
+                    <h2>全部调用记录</h2>
+                    <span id="historyCount" class="summary-meta"></span>
+                  </div>
+                  <button id="reloadHistory" class="link-button">刷新</button>
+                </div>
+                <div id="historyList"></div>
+                <div class="history-pagination">
+                  <button id="historyPrev" class="secondary">上一页</button
+                  ><span id="historyPage" class="hint"></span
+                  ><button id="historyNext" class="secondary">下一页</button>
+                </div>
+              </aside>
+              <article id="historyDetail" class="box history-detail">
+                <div class="empty">
+                  <h3>选择一条记录</h3>
+                  <p>查看任务、请求和评价。</p>
+                </div>
+              </article>
             </div>
-            <button id="savePricing" class="primary" type="submit">
-              保存此模型与时段单价
-            </button>
-          </form>
-          <p class="hint">
-            全时段价格适用于每天
-            00:00–24:00，需要自行填写；同模型优先使用自定义时段价格，其次是全时段价格，再使用内置价格。高峰为北京时间周一至周五（中国法定节假日除外）09:00–12:00、14:00–18:00，其余为空闲时段，周末补班仍按空闲计。日历暂覆盖
-            2004–2027 年，超出范围的工作日高峰窗口保留未知。
-          </p>
-          <p class="hint">
-            已有 DeepSeek
-            调用已按记录时间和内置价格重新估算，详情保留原费用与价格快照。以后调价仅影响后续调用。无匹配价格或缺少用量时为未知；Mock
-            和明确未发送的请求为零。最终扣费以 Provider 账单为准。
-          </p>
-        </article>
-      </section>
-    </main>
+          </div>
+          <div id="historyCompare" hidden>
+            <p class="hint">
+              核对输入、权益、参数和 Prompt
+              差异后阅读结果；单次采样不代表稳定胜率。
+            </p>
+            <section class="box compare-setup">
+              <div class="two">
+                <div>
+                  <label for="compareA">实验 A</label
+                  ><select id="compareA"></select>
+                </div>
+                <div>
+                  <label for="compareB">实验 B</label
+                  ><select id="compareB"></select>
+                </div>
+              </div>
+              <div class="button-row">
+                <button id="compare" class="primary" disabled>开始对比</button
+                ><button id="clearCompare" class="secondary">清空选择</button>
+              </div>
+            </section>
+            <div id="comparison" class="comparison"></div>
+          </div>
+          <div id="historyBatchCompare" hidden>
+            <section class="box batch-comparison-setup">
+              <h2>按相同用例配对</h2>
+              <p class="hint">
+                每批每个用例最多执行一次，重跑创建新批次。只对输入、断言和判定规则一致的真实断言统计共同样本。
+              </p>
+              <div class="two">
+                <label>批次 A<select id="batchCompareA"></select></label>
+                <label>批次 B<select id="batchCompareB"></select></label>
+              </div>
+              <div class="button-row">
+                <button id="compareBatches" class="primary" disabled>
+                  对比两个批次
+                </button>
+                <button id="reloadBatchChoices" class="secondary">
+                  刷新批次
+                </button>
+                <button id="exportBatchComparison" class="secondary" disabled>
+                  导出对比 JSON
+                </button>
+              </div>
+              <div class="history-pagination">
+                <button id="batchChoicePrev" class="secondary">
+                  上一页批次
+                </button>
+                <span id="batchChoicePage" class="hint"></span>
+                <button id="batchChoiceNext" class="secondary">
+                  下一页批次
+                </button>
+              </div>
+            </section>
+            <p id="batchCompareStatus" class="hint" role="status"></p>
+            <div id="batchCompareSummary"></div>
+            <label class="batch-pair-filter"
+              >配对结果<select id="batchPairFilter">
+                <option value="all">全部</option>
+                <option value="new_failure">新增失败</option>
+                <option value="fixed">已修复</option>
+                <option value="still_failed">仍失败</option>
+                <option value="both_passed">共同通过</option>
+                <option value="scope_changed">口径变化</option>
+                <option value="unexecuted">未执行</option>
+                <option value="execution_error">执行错误</option>
+                <option value="mock">Mock 联调</option>
+                <option value="input_rejection">预期输入拒绝</option>
+                <option value="only_a">仅 A</option>
+                <option value="only_b">仅 B</option>
+              </select></label
+            >
+            <div id="batchCompareRows"></div>
+          </div>
+        </section>
+        <section id="page-costs" class="page-view" data-page="costs" hidden>
+          <div class="page-heading">
+            <div>
+              <h1>开支</h1>
+              <p>覆盖全部调用；已知估算、费用未知和未计费分别统计。</p>
+            </div>
+            <button id="reloadCosts" class="secondary">刷新统计</button>
+          </div>
+          <p id="costLoadState" class="hint" role="status"></p>
+          <div id="costMetrics" class="metrics cost-metrics"></div>
+          <p id="costCoverage" class="hint"></p>
+          <article class="box">
+            <div class="box-heading"><h2>版本费用汇总</h2></div>
+            <p class="hint">
+              同一版本的不同 Prompt
+              指纹和草稿分别统计。模型返回用量后，即使建议校验失败也计入费用。
+            </p>
+            <div
+              class="cost-table-scroll"
+              tabindex="0"
+              role="region"
+              aria-label="版本费用汇总表，可横向滚动"
+            >
+              <table class="cost-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Provider</th>
+                    <th scope="col">Prompt / 指纹</th>
+                    <th scope="col">模型</th>
+                    <th scope="col">单价时段</th>
+                    <th scope="col">调用数</th>
+                    <th scope="col">输入 / 输出 tokens</th>
+                    <th scope="col">已知估算 · CNY</th>
+                    <th scope="col">估算 / 未计费 / 未知 / 进行中</th>
+                  </tr>
+                </thead>
+                <tbody id="costRows"></tbody>
+              </table>
+            </div>
+            <p id="costEmpty" class="empty">
+              暂无调用记录。生成后在这里查看费用。
+            </p>
+          </article>
+          <details class="box cost-pricing">
+            <summary>单价设置</summary>
+            <div class="pricing-content">
+              <div class="box-heading">
+                <h2>调用单价</h2>
+                <a
+                  href="https://api-docs.deepseek.com/zh-cn/quick_start/pricing"
+                  target="_blank"
+                  rel="noreferrer"
+                  >DeepSeek 官方价格 ↗</a
+                >
+              </div>
+              <p class="hint">
+                内置 DeepSeek 高峰期、DeepSeek
+                空闲时段、全时段三种单价版本。Flash 和 Pro
+                已内置官方高峰/空闲价格（2026-11-07
+                核对），按调用开始的北京时间及中国节假日日历自动选择。单位为元 /
+                百万 tokens。
+              </p>
+              <p id="pricingSchedule" class="hint" role="status"></p>
+              <div id="pricingRules"></div>
+              <p class="hint">
+                内置及自定义价格均可删除，刷新或重启后保持删除。删除仅影响后续调用，历史费用快照保留；无其他匹配价格时费用为未知。可在下方重新填写并保存价格。
+              </p>
+              <form id="pricingForm">
+                <div class="two">
+                  <div>
+                    <label for="priceModel">DeepSeek 模型 ID</label
+                    ><input
+                      id="priceModel"
+                      list="modelList"
+                      value="deepseek-flash"
+                      pattern="[a-zA-Z0-9._-]{1,100}"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label for="pricePeriod">单价版本</label
+                    ><select id="pricePeriod">
+                      <option value="deepseek_peak">DeepSeek 高峰期</option>
+                      <option value="deepseek_off_peak">
+                        DeepSeek 空闲时段
+                      </option>
+                      <option value="all_day">全时段</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label for="priceLabel">价格标签</label
+                  ><input
+                    id="priceLabel"
+                    placeholder="例如：2026-11-07 官方价格"
+                    maxlength="120"
+                    required
+                  />
+                </div>
+                <div class="price-inputs">
+                  <div>
+                    <label for="priceHit">输入 · 缓存命中</label
+                    ><input
+                      id="priceHit"
+                      type="number"
+                      min="0"
+                      max="1000000"
+                      step="0.00000001"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label for="priceMiss">输入 · 缓存未命中</label
+                    ><input
+                      id="priceMiss"
+                      type="number"
+                      min="0"
+                      max="1000000"
+                      step="0.00000001"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label for="priceOutput">输出</label
+                    ><input
+                      id="priceOutput"
+                      type="number"
+                      min="0"
+                      max="1000000"
+                      step="0.00000001"
+                      required
+                    />
+                  </div>
+                </div>
+                <button id="savePricing" class="primary" type="submit">
+                  保存此模型与时段单价
+                </button>
+              </form>
+              <p class="hint">
+                全时段价格适用于每天
+                00:00–24:00，需要自行填写；同模型优先使用自定义时段价格，其次是全时段价格，再使用内置价格。高峰为北京时间周一至周五（中国法定节假日除外）09:00–12:00、14:00–18:00，其余为空闲时段，周末补班仍按空闲计。日历暂覆盖
+                2004–2027 年，超出范围的工作日高峰窗口保留未知。
+              </p>
+              <p class="hint">
+                已有 DeepSeek
+                调用已按记录时间和内置价格重新估算，详情保留原费用与价格快照。以后调价仅影响后续调用。无匹配价格或缺少用量时为未知；Mock
+                和明确未发送的请求为零。最终扣费以 Provider 账单为准。
+              </p>
+            </div>
+          </details>
+        </section>
+      </main>
+    </div>
     <div
       id="status"
       class="status-message"

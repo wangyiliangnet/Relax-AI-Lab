@@ -35,6 +35,23 @@ export function filterCases(cases, query = "", suite = "all") {
   );
 }
 
+export function matchesCaseResult(item, filter, reviewed = false) {
+  if (filter === "all") return true;
+  if (!item) return false;
+  if (filter === "skipped") return item.state === "skipped";
+  if (filter === "failed") return item.report?.verdict === "failed";
+  if (filter === "errors")
+    return (
+      item.state === "error" ||
+      (item.state === "done" &&
+        !["passed", "failed", "mock", "expected_input_rejection"].includes(
+          item.report?.verdict,
+        ))
+    );
+  if (filter === "unreviewed") return Boolean(item.report?.runID) && !reviewed;
+  return false;
+}
+
 export function createCaseBatch(ids, configuration) {
   return {
     startedAt: new Date().toISOString(),

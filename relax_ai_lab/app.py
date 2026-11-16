@@ -1,17 +1,27 @@
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import Field
 
+from .batches import BatchCreation, Batches, BatchStop
 from .cases import execute_case, load_cases
 from .config import ROOT, Settings
 from .costs import PricingDeletion, PricingRule, pricing_schedule
-from .models import CaseExecution, Contract, Experiment, GenerationRequest, Profile, PromptVersion
+from .models import (
+    CaseExecution,
+    Contract,
+    Experiment,
+    GenerationRequest,
+    Profile,
+    ProfilePatch,
+    PromptVersion,
+)
 from .network import connection_info
 from .provider import LabError
 from .service import Lab
@@ -25,8 +35,10 @@ class Feedback(Contract):
 def create_app(settings: Settings | None = None, provider=None):
     catalog = load_cases()
     lab = Lab(settings or Settings.from_env(), provider)
+    batches = Batches(lab, catalog)
     app = FastAPI(title="Relax AI Lab", version="0.1.0", description="本地联调服务；所有会员和积分均为模拟。")
     app.state.lab = lab
+    app.state.batches = batches
 
     @app.middleware("http")
     async def local_browser_origin(request: Request, call_next):
@@ -89,6 +101,10 @@ def create_app(settings: Settings | None = None, provider=None):
         await lab.save_profile(profile)
         return profile
 
+    @app.patch("/lab/profile", tags=["Lab"])
+    async def patch_profile(patch: ProfilePatch):
+        return await lab.patch_profile(patch)
+
     @app.get("/lab/prompts", tags=["Lab"])
     async def prompts():
         return lab.store.prompts()
@@ -114,8 +130,63 @@ def create_app(settings: Settings | None = None, provider=None):
         )
 
     @app.get("/lab/runs", tags=["Lab"])
-    async def history():
-        return lab.store.recent_runs()
+    async def history(
+        page: int | None = Query(default=None, ge=1),
+        pageSize: int = Query(default=8, ge=1, le=100),
+        q: str = Query(default="", max_length=500),
+        status: Literal["all", "success", "failed", "running", "interrupted"] = "all",
+        source: Literal["all", "browser", "ios", "agent"] = "all",
+        provider: Literal["mock", "deepseek"] | None = None,
+        promptVersion: str | None = Query(default=None, max_length=80),
+        model: str | None = Query(default=None, max_length=100),
+        promptHash: str | None = Query(default=None, max_length=64),
+        caseID: str | None = Query(default=None, max_length=200),
+        batchID: str | None = Query(default=None, max_length=80),
+    ):
+        if page is None:
+            return lab.store.recent_runs()
+        return lab.store.query_runs(
+            page, pageSize, q, status, source, provider, promptVersion, model, promptHash, caseID, batchID
+        )
+
+    @app.post("/lab/batches", status_code=201, tags=["Lab"])
+    async def create_batch(selection: BatchCreation):
+        return batches.create(selection)
+
+    @app.get("/lab/batches", tags=["Lab"])
+    async def list_batches(
+        page: int = Query(default=1, ge=1), pageSize: int = Query(default=8, ge=1, le=100)
+    ):
+        return batches.list(page, pageSize)
+
+    @app.get("/lab/batches/compare", tags=["Lab"])
+    async def compare_batches(a: str, b: str):
+        return batches.compare(a, b)
+
+    @app.get("/lab/batches/{batch_id}", tags=["Lab"])
+    async def batch_detail(batch_id: str):
+        batch = batches.require(batch_id)
+        ids = [item["runID"] for item in batch["items"] if item["runID"]]
+        if ids:
+            with lab.store.connect() as db:
+                rows = db.execute(
+                    "SELECT id, json_extract(payload, '$.feedback') FROM runs WHERE id IN ("
+                    + ",".join("?" for _ in ids)
+                    + ")",
+                    ids,
+                ).fetchall()
+            feedback = {run_id: json.loads(value) if value else None for run_id, value in rows}
+            for item in batch["items"]:
+                item["feedback"] = feedback.get(item["runID"])
+        return batch
+
+    @app.post("/lab/batches/{batch_id}/stop", tags=["Lab"])
+    async def stop_batch(batch_id: str, request: BatchStop | None = None):
+        return batches.stop(batch_id, request.reason if request else "user")
+
+    @app.post("/lab/batches/{batch_id}/items/{case_id}/run", tags=["Lab"])
+    async def run_batch_item(batch_id: str, case_id: str):
+        return await batches.run_item(batch_id, case_id)
 
     @app.get("/lab/costs", tags=["Lab"])
     async def costs():

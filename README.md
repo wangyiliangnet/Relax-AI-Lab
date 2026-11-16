@@ -15,12 +15,12 @@ uv sync --locked
 ./scripts/dev.sh
 ```
 
-- [项目部署](http://127.0.0.1:8765/deployment)
-- [Prompt 与模型参数](http://127.0.0.1:8765/prompts)
-- [用例评测](http://127.0.0.1:8765/cases)
-- [目标与任务模拟](http://127.0.0.1:8765/simulate)
-- [历史与对比](http://127.0.0.1:8765/history)
-- [AI 开支](http://127.0.0.1:8765/costs)
+- [实验台 · 快速模拟](http://127.0.0.1:8765/simulate)
+- [实验台 · 固定用例](http://127.0.0.1:8765/cases)
+- [Prompt 版本](http://127.0.0.1:8765/prompts)
+- [记录与对比](http://127.0.0.1:8765/history)
+- [开支](http://127.0.0.1:8765/costs)
+- [连接与环境](http://127.0.0.1:8765/deployment)
 - [Swagger](http://127.0.0.1:8765/docs)
 - [健康状态](http://127.0.0.1:8765/health)
 
@@ -38,27 +38,31 @@ uv run python -m relax_ai_lab --host 0.0.0.0 --port 8765
 
 macOS / Linux 也可以运行 `./scripts/dev.sh --host 0.0.0.0`。可在 `.env` 配置 `LAB_HOST=0.0.0.0`、`LAB_PORT=8765`，命令行参数优先；默认仍为仅本机监听。
 
-Web 的“项目部署”页提供监听状态、网卡地址、健康检查 URL、可复制的 Xcode 配置和排查步骤。选择手机可达的 Wi-Fi / 以太网 IPv4，不使用 `0.0.0.0` 作为连接 URL。地址变化后更新 Xcode 变量并重新 Run。
+Web 的“连接与环境”页提供监听状态、网卡地址、健康检查 URL、可复制的 Xcode 配置和排查步骤。选择手机可达的 Wi-Fi / 以太网 IPv4，不使用 `0.0.0.0` 作为连接 URL。地址变化后更新 Xcode 变量并重新 Run。
 
 手机与电脑在同一局域网；先用手机浏览器打开 `http://电脑IP:8765/health`，确认返回 `status: ok`。防火墙需允许入站 TCP 8765，Wi-Fi 不能启用客户端隔离。服务无登录认证，只用于受信局域网；所有客户端共用一个模拟账本和服务配置，密钥只保存在部署电脑。
 
 ## 调优
 
-六个页面可直接访问和刷新。通过顶部导航切换时保留目标、Prompt 草稿、当前 AI 会话及用例评测状态；Prompt 与模型参数在会话或评测运行期间锁定。会话操作位于任务模拟页顶部，滚动时保持可见。任务卡片使用 App 的循环、日期、量化概念，目标日期策略展开为实际日期。
+六个页面可直接访问和刷新。桌面侧栏将快速模拟、固定用例归入实验台，窄屏使用可换行导航。统一使用浅色界面。站内导航保留目标、Prompt 草稿、当前 AI 会话及用例评测状态；Prompt 与模型参数在会话或评测运行期间锁定。会话操作位于快速模拟页顶部，滚动时保持可见。任务卡片使用 App 的循环、日期、量化概念，目标日期策略展开为实际日期。
 
-本次生成的参数校验、人工评价及折叠请求记录跟随当前结果。历史与对比独立成页：支持搜索、状态/来源筛选、分页列表与单条详情，并在“对比实验”中查看 A/B 结果。历史日期按该记录的目标快照解释，历史选择不会切换当前会话。
+配置摘要区分当前试验配置、未保存草稿与服务共享配置。保存新版本只创建 Prompt 版本；在 Prompt 页“应用生成配置到共享服务”后，后续 iOS 请求才使用该配置。“连接与环境”页单独应用模拟权益。两类应用均通过 PATCH /lab/profile 只提交本次修改的字段；服务保留未提交的配置和权益。原 GET/PUT 接口继续兼容，按本次范围不实现修订号或并发冲突检测。
+
+本标签页的目标输入、按版本的 Prompt 草稿、用例选择与筛选、历史浏览位置及未保存评价通过 sessionStorage 恢复。刷新不恢复 AI 会话、排重集合或已模拟添加任务；评测批次按保存的 ID 从服务归档恢复，不自动续跑，也不会重新发出模型调用。读取共享配置不会替换当前草稿；显式替换后可恢复原版本草稿。活动条区分本浏览器会话、已发送请求和服务忙碌，生成中关闭会话仍可查看请求活动。
+
+模拟、固定用例、历史和 A/B 共用结果详情，提供运行概览、任务建议、自动检查、人工评价及折叠原始记录。评价草稿按调用 ID 跨页面保留，保存期间的新编辑不会被旧提交覆盖。结果可直接设为 A/B，或明确复制目标、语言与生成配置为新试验；复制不带入旧会话排重，草稿的固定契约已变化时须手动核对。历史使用服务端全量检索与分页，每页 8 条，支持来源、状态、调用方式、用例及批次筛选；开支同样覆盖全部记录。无分页参数的旧历史接口仍返回最近 100 条数组。历史查看不会切换当前会话。
 
 JSON 查看器支持结构树、格式化文本、语法高亮、展开/折叠及复制。模型消息中编码的 JSON 字符串可展开为结构；长文本和 Prompt 独立折叠，导出仍保留原始调用记录。完整请求预览放在 Prompt 页。
 
 1. 填写模拟目标标题 `goal.title`、备注 `goal.note`、日期和 App 当前界面语言 `locale`。`locale` 模拟 iOS 的 `Bundle.main.preferredLocalizations.first`，不读取浏览器语言。
-2. 选择/编辑业务 prompt 和模型参数。预览 initial 请求不调用模型。页面支持 GitHub Light、GitHub Dark 和跟随系统配色。
+2. 选择/编辑业务 prompt 和模型参数。预览 initial 请求不调用模型，并显示目标、日期与 App 语言上下文。
 3. 打开“AI 任务灵感”会话，自动检查权益后首次生成。目标、语言、prompt 与模型参数在该会话中锁定，成功结果默认全选。
 4. “换一批”清空当前建议与选择，自动使用 `generationMode=refresh` 并累计已展示标题。失败不恢复旧结果，手动重试保留该模式和排重历史。
 5. 关闭会话会丢弃建议、选择和排重历史；同一目标重新打开使用 initial。已发出的调用仍可能完成并消耗用量，迟到响应不会恢复已关闭的会话。
 6. “模拟添加”将所选任务放进页面内存中的模拟目标，AI 空态入口隐藏；清空模拟任务后恢复。Web 不写 Core Data，也不代替 App 的任务数量/会员保存检查。
 7. 要比较另一份 prompt，关闭会话后切换/编辑版本，保持目标 ID 不变再打开。历史快照只用于查看、评价和对比，不改变当前目标和会话。不同请求上下文的比较会明确提示。
 
-调用记录保留完整 prompt、SHA-256、参数、输入、原始输出、校验结果、耗时及 token，支持评价与 JSON 导出；关闭 Web 会话不删除后端实验记录。模型/prompt 可只用于本次 Web 会话；保存“服务共享配置”后，iOS 下次请求才采用该版本。修改过的 prompt 需先保存新版本。
+调用记录保留完整 prompt、SHA-256、参数、输入、原始输出、校验结果、耗时及 token，支持评价与 JSON 导出；关闭 Web 会话不删除后端实验记录。模型/prompt 可只用于本次 Web 试验；“应用生成配置到共享服务”后，iOS 下次请求才采用该版本。修改过的 prompt 需先保存新版本。
 
 教练 prompt 在 `prompts/coach-v1.md`，固定契约在 `prompts/contract.md`，Task JSON Schema 自动追加。新版本保存在 Git 忽略的 `data/prompts/`，版本名不可覆盖。结构合法不代表建议有用，质量判断仍需人工进行。
 
@@ -68,11 +72,15 @@ JSON 查看器支持结构树、格式化文本、语法高亮、展开/折叠�
 
 用例保留业务输入、模拟会员身份、自动断言和人工检查项。主集有 54 条，历史留出组有 10 条。历史留出组曾用于调优，统计时保留原分组。用例清单在 [examples/task-inspirations](examples/task-inspirations)。编辑用例后重启服务以加载新清单。
 
-**人工验证**　在「Prompt 与模型参数」选择版本或编辑草稿，点击「用固定用例评测」进入独立的「用例评测」页。按关键词或主集 / 历史留出组筛选，勾选多条或全选筛选结果；切换筛选保留已选用例。点击名称可预览固定输入、权益、断言和人工检查项。
+**人工验证**　在「Prompt 版本」选择版本或编辑草稿，点击「用固定用例评测」进入「固定用例」页。按关键词或主集 / 历史留出组筛选，勾选多条或全选筛选结果；切换筛选保留已选用例，并显示隐藏的选择数量。点击名称可预览固定输入、权益、断言和人工检查项。真实调用前显示预计最多调用数，不虚构 token 金额预算。
 
-点击「运行所选用例」后，本批固定启动时的 Prompt、草稿和模型参数，按顺序逐条运行，顶部显示进度，并分别统计断言通过、断言失败、Mock、预期输入拒绝、执行错误和未执行。断言失败继续执行；上游或连接错误停止后续用例，不自动重试。「停止后续用例」会等待当前请求完成并保留结果，已发送的真实调用仍可能计费。页面导航不打断批次；刷新或关闭页面会丢失页面中的批次与选择，已发出的请求可能继续，调用记录仍保存在历史中。
+点击「运行所选用例」（Mock 时为「运行 Mock 联调」）后，先创建服务归档，固定完整 Prompt（含契约及 Schema）、输入、权益、断言、人工检查项及判定规则指纹，再按固定顺序逐条运行，顶部显示进度，并分别统计断言通过、断言失败、Mock、预期输入拒绝、执行错误和未执行。断言失败继续执行；上游或连接错误停止后续用例，不自动重试。「停止后续用例」会等待当前请求完成并保留结果，已发送的真实调用仍可能计费。页面导航不打断批次；刷新或关闭页面会停止后续提交，已发出的请求仍可能完成。刷新读取归档，保留已完成结果，并将剩余用例列为未执行，不自动补跑。关闭时停止通知可能因断网未送达，归档可显示等待客户端；打开归档后可手动停止，服务重启时也会核对记录并标为中断。
 
-运行后点击用例逐条阅读建议、保存人工评价、查看原始记录，或进入「历史与对比」做版本对比。本批结果可导出 JSON，包含固定配置、用例快照、判定和调用 ID。换版本后可保留选择再次运行，页面展示最新一批，旧调用仍可在历史中查看。目标模拟会话与用例评测互斥运行；自行填写目标仍走「目标与任务模拟」中的「打开 AI 任务灵感」流程。
+运行后可按断言失败、执行错误、未执行或待人工评价筛选结果；点击用例阅读建议、保存人工评价、查看原始记录，或进入「记录与对比」做版本对比。本批结果可导出 JSON，包含固定配置、用例快照、判定和调用 ID。再次运行创建新批次，旧批次与调用均保留。可填写批次名称，从“评测批次归档”分页打开、导出或设为批次 A/B；归档使用当时的用例快照，返回当前用例库后准备新批次。目标模拟会话与用例评测互斥运行；自行填写目标仍走「快速模拟」中的「打开 AI 任务灵感」流程。
+
+**批次对比**　在“记录与对比 → 批次对比”选择两个归档，或在归档列表分别设为批次 A/B。按 caseID 配对后核对输入、断言、权益及判定规则指纹；口径变化、仅 A、仅 B、未执行、执行错误、Mock 和预期输入拒绝单列。只有口径一致且双方均完成的真实 passed / failed 断言进入共同样本，显示新增失败、已修复、仍失败和共同通过。逐条展开才读取两次完整记录，支持人工评价、查看参数和对比导出。
+
+每批每个用例只执行一次；同一条目重复提交会返回原判定，不重新调用模型。重跑创建新批次，不把多次采样混成一个结果。汇总费用、token 与耗时基于实际记录，未知项单列；即使某侧多选了用例，也不把缺失项当成失败。批次执行仍由浏览器逐条提交，服务负责快照、原子条目领取和结果持久化，没有脱离页面的后台续跑器。
 
 **Agent 调用**　启动 Lab 后在仓库根目录运行以下命令。`--list` 输出用例 JSON；`--case`、`--version` 均可重复。省略 `--case` 时执行所选组的全部用例，省略 `--suite` 时使用两组。CLI 固定本批次启动时的模型和采样参数。
 
@@ -135,7 +143,7 @@ RELAX_AI_BASE_URL = http://localhost:8765
 iOS 已加入本地网络权限用途说明（三种语言）、`NSAllowsLocalNetworking` 及回环/私有 IPv4/链路本地网段的 HTTP ATS 例外，未启用全局 `NSAllowsArbitraryLoads`。iOS 17+ 支持 IP/CIDR 例外，较早系统对这些本地 IP 默认允许 ATS 访问。首次请求时允许“本地网络”；拒绝后到系统设置 → 隐私与安全性 → 本地网络中开启 App 权限。说明依据 [Apple ATS 文档](https://developer.apple.com/documentation/bundleresources/information-property-list/nsapptransportsecurity/nsexceptiondomains)。
 
 - 入口仅在 `DEBUG` / `DEMO_APP` 生效；移除变量后恢复客户端 Mock，发布配置不受影响。
-- 浏览器的会员和已用积分修改需“应用配置”后生效，与 iOS 共用模拟账本。
+- “连接与环境”中的会员和已用积分修改需“应用模拟权益”后生效，与 iOS 共用模拟账本。
 - 成功一批扣配置的模拟积分，失败不扣模拟积分。没有自动周期重置，`resetsAt=null`、`proResetsMonthly=false`。
 - DeepSeek 失败或超时仍可能实际计费，本服务不会自动重试。
 - 模拟 Pro 不改变真实 StoreKit 状态；保存仍执行现有会员和任务数量限制。
@@ -147,11 +155,17 @@ iOS 已加入本地网络权限用途说明（三种语言）、`NSAllowsLocalNe
 | --- | --- |
 | `GET /v1/ai/entitlement` | 模拟权益与积分 |
 | `POST /v1/ai/task-inspirations` | iOS 上下文 → `{goalID, plans}` |
-| `GET/PUT /lab/profile` | 当前配置与模拟账本 |
+| `GET/PUT /lab/profile` | 当前配置与模拟账本，保留原完整读写方式 |
+| `PATCH /lab/profile` | 只更新指定字段；options 支持嵌套局部更新，返回完整 Profile |
 | `GET /lab/connection` | 实际启动配置与局域网 IPv4 候选地址 |
 | `GET/POST /lab/prompts` | 读取/创建不可覆盖的版本 |
 | `POST /lab/preview` | 预览请求，不消耗 token |
-| `GET/POST /lab/runs` | 历史/浏览器实验 |
+| `GET/POST /lab/runs` | 历史/浏览器实验；GET 带 page 时返回全量分页对象，无 page 保留旧数组 |
+| `GET/POST /lab/batches` | 分页查询归档 / 创建固定配置与用例快照的批次 |
+| `GET /lab/batches/{id}` | 批次完整快照、状态与判定 |
+| `POST /lab/batches/{id}/items/{caseID}/run` | 按批次顺序执行一条；重复提交不重复调用 |
+| `POST /lab/batches/{id}/stop` | 停止后续，保留当前已发出的调用 |
+| `GET /lab/batches/compare?a=...&b=...` | 按相同用例与判定口径配对比较 |
 | `GET /lab/runs/{id}` | 完整记录 |
 | `GET /lab/costs` | 全部记录的费用与 token 汇总 |
 | `GET/PUT /lab/pricing` | 读取内置及自定义单价 / 保存某模型、时段和上游地址的新单价 |
@@ -165,6 +179,18 @@ curl --fail http://127.0.0.1:8765/v1/ai/entitlement
 curl --fail-with-body http://127.0.0.1:8765/v1/ai/task-inspirations \
   -H 'Content-Type: application/json' --data-binary @examples/request.json
 ```
+
+共享配置支持字段级更新，例如 PATCH /lab/profile 提交 {"options":{"promptVersion":"coach-v1"}} 只更新版本，提交 {"isPro":false,"usedCredits":0} 只更新模拟权益。未提交字段保持不变，false 和 0 均作为明确更新保留；不接受空请求、空 options、null 或未知字段，类型和范围沿用现有 Profile / Options 校验。修改后返回完整 Profile，无需先读取再拼接完整对象。原 GET/PUT 请求及返回结构不变。
+
+全量历史 GET 使用 page（从 1 开始）、pageSize（1–100，默认 8）、q、status、source，可选 provider、promptVersion、model、promptHash、caseID、batchID；返回 items、total、page、pageSize、totalPages。摘要包含草稿、完整指纹、用例、判定和批次 ID，不包含 Prompt 正文或原始响应。无 page 时保留旧行为，返回最近 100 条数组，旧单条用例及 iOS 接口不变。
+
+创建归档的请求示例（本步不调用模型），执行时无需重传配置：
+
+```json
+{"caseIDs":["vocab","bad-day"],"options":{"provider":"mock","promptVersion":"coach-v1"},"source":"agent","name":"候选版本验证"}
+```
+
+随后按上述 caseIDs 顺序 POST /lab/batches/{id}/items/{caseID}/run。预期输入拒绝也保存在条目中，其 runID 为 null。停止可提交 {"reason":"user"}；刷新恢复使用 browser_refresh，关闭或连接中断使用 browser_closed。原 scripts.evaluate_cases CLI 仍走兼容的单条接口，不推测合并成归档；Agent 如需归档可使用这组新增接口。
 
 响应头 `X-Lab-Run-ID` 对应调用记录。402 为模拟积分不足；409 忙碌；422 输入/配置非法；502 上游或输出失败；503 未配置 key；504 超时。错误体为 `error` 对象，含 `code/message/runID?/entitlement?`；FastAPI 输入验证的 422 使用标准 `detail` 结构。
 
@@ -184,9 +210,17 @@ git diff --check
 
 自动测试使用临时数据和替代 HTTP transport，不调用真实模型。实际验证范围见 [验证记录](docs/validation.md)。
 
+可选浏览器回归会自动启动无 key 的隔离 Mock 服务，并在 data/ 保存报告与截图：
+
+```sh
+uv run --with playwright python -m scripts.check_web_ui
+uv run --with playwright python -m scripts.check_batch_ui
+# 其他系统可通过 --chrome 指定已有 Chrome / Chromium 可执行文件
+```
+
 ## 参考与决策
 
-- [设计决策](docs/design.md)、[迁入正式后端](docs/migration.md)
+- [设计决策](docs/design.md)、[界面与流程整合方案](docs/ux-integration-proposal.md)、[迁入正式后端](docs/migration.md)
 - [DeepSeek JSON Output](https://api-docs.deepseek.com/zh-cn/guides/json_mode/)
 - [DeepSeek Chat Completions](https://api-docs.deepseek.com/zh-cn/api/create-chat-completion/)
 - iOS 契约：相邻 `Relax/RelaxCore/Features/Goal/TaskInspiration/`

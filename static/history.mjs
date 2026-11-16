@@ -1,3 +1,4 @@
+import { comparisonDifferences } from "./workspace.mjs";
 const $ = (id) => document.getElementById(id);
 const node = (tag, text, className) => {
   const e = document.createElement(tag);
@@ -17,45 +18,73 @@ const when = (value) =>
   new Date(value).toLocaleString("zh-CN", { hour12: false });
 export function createHistoryController({
   api,
-  renderPlans,
-  renderIssues,
-  renderMetrics,
-  renderTrace,
-  formatCaseVerdict,
+  renderResult,
+  workspace,
   notify,
-  onFeedback,
+  onBatchView,
 }) {
+  const saved = workspace.get("history", {});
+  let view = ["compare", "batches"].includes(saved.view)
+    ? saved.view
+    : "browse";
   let runs = [],
-    filtered = [],
-    page = 0,
-    selectedID = null,
+    total = 0,
+    totalPages = 1,
+    searchTimer,
+    page = Number.isInteger(saved.page) && saved.page >= 0 ? saved.page : 0,
+    selectedID = typeof saved.selectedID === "string" ? saved.selectedID : null,
     renderedID = null,
     renderedStatus = null,
     loadID = 0,
     detailID = 0,
     compareID = 0;
   const cache = new Map(),
-    selection = { a: "", b: "" },
+    selection = {
+      a: typeof saved.selection?.a === "string" ? saved.selection.a : "",
+      b: typeof saved.selection?.b === "string" ? saved.selection.b : "",
+    },
     pageSize = 8;
-  const matches = (run) => {
-    const query = $("historySearch").value.trim().toLowerCase(),
-      state = $("historyStatus").value,
-      source = $("historySource").value;
-    return (
-      (!query ||
-        [run.goalTitle, run.id, run.options.promptVersion, run.options.model]
-          .join(" ")
-          .toLowerCase()
-          .includes(query)) &&
-      (state === "all" ||
-        run.status === state ||
-        (state === "failed" && run.status === "interrupted")) &&
-      (source === "all" || run.source === source)
-    );
-  };
-  function setView(next) {
+  for (const [id, value] of Object.entries(saved.filters || {}))
+    if (
+      [
+        "historySearch",
+        "historyStatus",
+        "historySource",
+        "historyProvider",
+        "historyCaseID",
+        "historyBatchID",
+      ].includes(id) &&
+      typeof value === "string"
+    )
+      $(id).value = value;
+  const remember = () =>
+    workspace.set("history", {
+      page,
+      selectedID,
+      selection,
+      view,
+      filters: Object.fromEntries(
+        [
+          "historySearch",
+          "historyStatus",
+          "historySource",
+          "historyProvider",
+          "historyCaseID",
+          "historyBatchID",
+        ].map((id) => [id, $(id).value]),
+      ),
+    });
+  function setView(next, loadBatches = true) {
+    view = next;
+    remember();
     $("historyBrowse").hidden = next !== "browse";
     $("historyCompare").hidden = next !== "compare";
+    $("historyBatchCompare").hidden = next !== "batches";
+    $("historyBatchTab").setAttribute(
+      "aria-pressed",
+      String(next === "batches"),
+    );
+    if (next === "batches" && loadBatches) onBatchView();
     $("historyBrowseTab").setAttribute(
       "aria-pressed",
       String(next === "browse"),
@@ -78,6 +107,7 @@ export function createHistoryController({
     $("comparison").replaceChildren();
     updateSelection();
     renderList();
+    remember();
   }
   function populateChoices() {
     for (const [slot, id] of [
@@ -98,19 +128,18 @@ export function createHistoryController({
         option.disabled = run.status === "running";
         select.append(option);
       }
-      if (!runs.some((run) => run.id === selection[slot])) selection[slot] = "";
+      if (selection[slot] && !runs.some((run) => run.id === selection[slot])) {
+        const extra = node("option", "已选调用 · " + selection[slot]);
+        extra.value = selection[slot];
+        select.append(extra);
+      }
     }
     updateSelection();
   }
   function renderList() {
-    filtered = runs.filter(matches);
-    page = Math.min(
-      page,
-      Math.max(0, Math.ceil(filtered.length / pageSize) - 1),
-    );
-    $("historyCount").textContent = `${filtered.length} 条`;
+    $("historyCount").textContent = `共 ${total} 条 · 本页 ${runs.length} 条`;
     $("historyList").replaceChildren();
-    const visible = filtered.slice(page * pageSize, (page + 1) * pageSize);
+    const visible = runs;
     if (!visible.length) {
       const empty = node("div", null, "empty");
       empty.append(node("h3", "没有匹配的记录"));
@@ -132,8 +161,18 @@ export function createHistoryController({
         ),
       );
       const meta = node("div", null, "history-row-meta");
+      const detail = cache.get(run.id);
       meta.append(
-        node("span", run.options.promptVersion),
+        node(
+          "span",
+          run.options.promptVersion +
+            ((run.promptEdited ?? detail?.promptEdited) ? "（草稿）" : ""),
+        ),
+        node(
+          "span",
+          run.options.provider === "mock" ? "Mock" : run.options.model,
+        ),
+        node("span", sourceLabels[run.source] || run.source),
         node("span", `${run.validTaskCount ?? "—"} 条建议`),
         node(
           "span",
@@ -146,6 +185,9 @@ export function createHistoryController({
           }),
         ),
       );
+      if (run.caseID) meta.append(node("span", "用例 " + run.caseID));
+      if (run.batchID)
+        meta.append(node("span", "批次 " + run.batchID.slice(0, 8)));
       main.append(heading, meta);
       main.onclick = () => selectRecord(run.id);
       row.append(main);
@@ -155,7 +197,7 @@ export function createHistoryController({
           "span",
           run.feedback
             ? ratings[run.feedback.rating] || run.feedback.rating
-            : sourceLabels[run.source] || run.source,
+            : "未评价",
           "hint",
         ),
       );
@@ -177,10 +219,9 @@ export function createHistoryController({
       row.append(actions);
       $("historyList").append(row);
     }
-    $("historyPage").textContent =
-      `${page + 1} / ${Math.max(1, Math.ceil(filtered.length / pageSize))}`;
+    $("historyPage").textContent = `${page + 1} / ${totalPages}`;
     $("historyPrev").disabled = page === 0;
-    $("historyNext").disabled = (page + 1) * pageSize >= filtered.length;
+    $("historyNext").disabled = page + 1 >= totalPages;
   }
   async function record(id) {
     const summary = runs.find((run) => run.id === id),
@@ -189,118 +230,23 @@ export function createHistoryController({
       if (summary) cached.feedback = summary.feedback;
       return cached;
     }
-    const result = await api("/lab/runs/" + id);
+    const result = await api("/lab/runs/" + encodeURIComponent(id));
     cache.set(id, result);
     if (cache.size > 20) cache.delete(cache.keys().next().value);
     return result;
-  }
-  function feedbackEditor(run) {
-    const wrapper = node("div", null, "review"),
-      select = node("select"),
-      note = node("textarea"),
-      save = node("button", "保存评价", "secondary");
-    const prefix = "history-feedback-" + run.id;
-    select.id = prefix;
-    note.id = prefix + "-note";
-    note.rows = 3;
-    const label = node("label", "评价");
-    label.htmlFor = select.id;
-    const noteLabel = node("label", "备注");
-    noteLabel.htmlFor = note.id;
-    for (const [value, text] of Object.entries(ratings)) {
-      const option = node("option", text);
-      option.value = value;
-      select.append(option);
-    }
-    select.value = run.feedback?.rating || "needs_work";
-    note.value = run.feedback?.note || "";
-    save.disabled = run.status === "running";
-    save.type = "button";
-    save.onclick = async () => {
-      save.disabled = true;
-      try {
-        const feedback = await api(
-          "/lab/runs/" + run.id + "/feedback",
-          "PATCH",
-          { rating: select.value, note: note.value },
-        );
-        run.feedback = feedback;
-        const summary = runs.find((item) => item.id === run.id);
-        if (summary) summary.feedback = feedback;
-        onFeedback(run);
-        renderList();
-        notify("评价已保存。");
-      } catch (error) {
-        notify(error.message, true);
-      } finally {
-        save.disabled = false;
-      }
-    };
-    wrapper.append(label, select, noteLabel, note, save);
-    return wrapper;
-  }
-  function detailSection(title, content, open = false) {
-    const details = node("details", null, "record-section");
-    details.open = open;
-    details.append(node("summary", title), content);
-    return details;
   }
   function renderDetail(run) {
     renderedID = run.id;
     renderedStatus = run.status;
     const target = $("historyDetail");
-    target.replaceChildren();
-    const heading = node("div", null, "box-heading");
-    heading.append(
-      node("h2", run.input.goal.title),
-      node(
-        "span",
-        statuses[run.status] || run.status,
-        `record-status status-${run.status}`,
-      ),
-    );
-    target.append(heading);
-    target.append(
-      node(
-        "p",
-        `${when(run.createdAt)} · ${sourceLabels[run.source] || run.source} · ${run.options.promptVersion}`,
-        "hint",
-      ),
-    );
-    const meta = node("dl", null, "record-facts");
-    for (const [label, value] of [
-      ["模型", run.options.model],
-      ["Provider", run.options.provider],
-      ["Run ID", run.id],
-    ]) {
-      const item = node("div");
-      item.append(node("dt", label), node("dd", value));
-      meta.append(item);
-    }
-    target.append(meta);
-    const metrics = node("div", null, "metrics");
-    renderMetrics(metrics, run);
-    target.append(metrics);
-    const tasks = node("div");
-    renderPlans(tasks, run, false, { compact: true });
-    target.append(
-      detailSection(
-        `任务建议 · ${(run.result?.plans || []).reduce((n, p) => n + p.suggestions.length, 0)} 条`,
-        tasks,
-        true,
-      ),
-    );
-    const assessment = node("div");
-    const issues = node("div");
-    renderIssues(issues, run);
-    assessment.append(issues, feedbackEditor(run));
-    target.append(detailSection("校验与评价", assessment));
-    const trace = node("div");
-    renderTrace(trace, run);
-    target.append(detailSection("请求与响应", trace));
+    target.replaceChildren(node("h2", run.input.goal.title));
+    const content = node("div");
+    renderResult(content, run);
+    target.append(content);
   }
-  async function selectRecord(id) {
+  async function selectRecord(id, scroll = true) {
     selectedID = id;
+    remember();
     const request = ++detailID;
     renderList();
     $("historyDetail").replaceChildren(node("p", "加载记录中…", "hint"));
@@ -308,7 +254,7 @@ export function createHistoryController({
       const run = await record(id);
       if (selectedID !== id || request !== detailID) return;
       renderDetail(run);
-      if (matchMedia("(max-width: 800px)").matches)
+      if (scroll && matchMedia("(max-width: 800px)").matches)
         $("historyDetail").scrollIntoView({ block: "start" });
     } catch (error) {
       if (request === detailID)
@@ -319,9 +265,38 @@ export function createHistoryController({
   }
   async function load(refreshDetail = false) {
     const request = ++loadID;
-    const result = await api("/lab/runs");
+    const params = new URLSearchParams({
+      page: String(page + 1),
+      pageSize: String(pageSize),
+      q: $("historySearch").value.trim(),
+      status: $("historyStatus").value || "all",
+      source: $("historySource").value || "all",
+    });
+    for (const [field, key] of [
+      ["historyProvider", "provider"],
+      ["historyCaseID", "caseID"],
+      ["historyBatchID", "batchID"],
+    ]) {
+      const value = $(field).value.trim();
+      if (value && value !== "all") params.set(key, value);
+    }
+    $("historyLoadState").textContent = "正在检索全部记录…";
+    let result;
+    try {
+      result = await api("/lab/runs?" + params);
+    } catch (error) {
+      if (request === loadID)
+        $("historyLoadState").textContent =
+          "读取失败，当前列表未更新，请刷新重试。";
+      throw error;
+    }
     if (request !== loadID) return;
-    runs = result;
+    runs = result.items;
+    total = result.total;
+    totalPages = result.totalPages;
+    page = result.page - 1;
+    $("historyLoadState").textContent = "覆盖全部调用 · 筛选与分页由服务端完成";
+    if (view === "batches") onBatchView();
     populateChoices();
     renderList();
     if (refreshDetail && selectedID) cache.delete(selectedID);
@@ -329,9 +304,11 @@ export function createHistoryController({
       selectedID &&
       (refreshDetail ||
         renderedID !== selectedID ||
-        runs.find((run) => run.id === selectedID)?.status !== renderedStatus)
+        (runs.some((run) => run.id === selectedID) &&
+          runs.find((run) => run.id === selectedID).status !== renderedStatus))
     )
-      await selectRecord(selectedID);
+      await selectRecord(selectedID, false);
+    remember();
   }
   async function compare() {
     if (!selection.a || !selection.b || selection.a === selection.b) return;
@@ -343,24 +320,16 @@ export function createHistoryController({
       const records = await Promise.all(ids.map(record));
       if (request !== compareID) return;
       $("comparison").replaceChildren();
-      const differences = [];
-      if (records[0].input.goal.id !== records[1].input.goal.id)
-        differences.push("不同目标");
-      else if (
-        JSON.stringify(records[0].effectiveRequest) !==
-        JSON.stringify(records[1].effectiveRequest)
-      )
-        differences.push("请求上下文不同");
-      if (records[0].entitlementBefore?.isPro !== records[1].entitlementBefore?.isPro)
-        differences.push("模拟会员身份不同");
-      if (["provider", "model", "temperature", "maxTokens"].some(
-        (key) => records[0].options[key] !== records[1].options[key],
-      ))
-        differences.push("模型或采样参数不同");
-      if (differences.length)
-        $("comparison").append(
-          node("p", differences.join(" · "), "comparison-context"),
-        );
+      const differences = comparisonDifferences(...records);
+      $("comparison").append(
+        node(
+          "p",
+          differences.length
+            ? differences.join(" · ")
+            : "业务输入、权益、模型、采样参数及 Prompt 指纹相同。",
+          "comparison-context",
+        ),
+      );
       records.forEach((run, index) => {
         const column = node("article", null, "box comparison-column");
         column.append(
@@ -376,24 +345,9 @@ export function createHistoryController({
             "hint",
           ),
         );
-        const metrics = node("div", null, "metrics");
-        renderMetrics(metrics, run);
-        column.append(metrics);
-        if (run.caseEvaluation) column.append(node("p", formatCaseVerdict(run.caseEvaluation)));
-        if (run.feedback)
-          column.append(
-            node(
-              "p",
-              `${ratings[run.feedback.rating] || run.feedback.rating}${run.feedback.note ? " · " + run.feedback.note : ""}`,
-              "comparison-feedback",
-            ),
-          );
-        const tasks = node("div");
-        renderPlans(tasks, run, false, { compact: true });
-        column.append(tasks);
-        const trace = node("div");
-        renderTrace(trace, run);
-        column.append(detailSection("请求与响应", trace));
+        const content = node("div");
+        renderResult(content, run, { actions: false });
+        column.append(content);
         $("comparison").append(column);
       });
     } catch (error) {
@@ -407,18 +361,37 @@ export function createHistoryController({
   }
   $("historyBrowseTab").onclick = () => setView("browse");
   $("historyCompareTab").onclick = () => setView("compare");
-  for (const id of ["historySearch", "historyStatus", "historySource"])
-    $(id).addEventListener(id === "historySearch" ? "input" : "change", () => {
-      page = 0;
-      renderList();
-    });
+  $("historyBatchTab").onclick = () => setView("batches");
+  for (const id of [
+    "historySearch",
+    "historyStatus",
+    "historySource",
+    "historyProvider",
+    "historyCaseID",
+    "historyBatchID",
+  ]) {
+    $(id).addEventListener(
+      ["historySearch", "historyCaseID", "historyBatchID"].includes(id)
+        ? "input"
+        : "change",
+      () => {
+        page = 0;
+        remember();
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(
+          () => load().catch((error) => notify(error.message, true)),
+          180,
+        );
+      },
+    );
+  }
   $("historyPrev").onclick = () => {
-    page--;
-    renderList();
+    page = Math.max(0, page - 1);
+    load().catch((error) => notify(error.message, true));
   };
   $("historyNext").onclick = () => {
     page++;
-    renderList();
+    load().catch((error) => notify(error.message, true));
   };
   $("reloadHistory").onclick = () =>
     load(true).catch((error) => notify(error.message, true));
@@ -431,16 +404,31 @@ export function createHistoryController({
     $("comparison").replaceChildren();
     updateSelection();
     renderList();
+    remember();
   };
   populateChoices();
+  setView(view, false);
   return {
     load,
+    showBatchCompare() {
+      setView("batches");
+    },
+    chooseRun(slot, run) {
+      cache.set(run.id, run);
+      choose(slot, run.id);
+      populateChoices();
+      setView("compare");
+    },
     focusRecord(id) {
       selectedID = id;
       renderedID = null;
       page = 0;
       $("historySearch").value = "";
-      $("historyStatus").value = $("historySource").value = "all";
+      $("historyStatus").value =
+        $("historySource").value =
+        $("historyProvider").value =
+          "all";
+      $("historyCaseID").value = $("historyBatchID").value = "";
       $("historyDetail").replaceChildren(node("p", "加载记录中…", "hint"));
       setView("browse");
     },
@@ -449,6 +437,7 @@ export function createHistoryController({
       if (summary) summary.feedback = run.feedback;
       cache.set(run.id, run);
       renderList();
+      remember();
     },
   };
 }
