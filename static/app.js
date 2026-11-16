@@ -28,6 +28,8 @@ const dateString = (date = new Date()) =>
 let profile,
   versions = [],
   samples = [],
+  cases = [],
+  runningCase = false,
   currentRun = null,
   session = null,
   simulatedTasks = [],
@@ -111,6 +113,12 @@ function options() {
     promptVersion: $("promptVersion").value,
   };
 }
+function selectedPromptText() {
+  const original = versions.find(
+    (version) => version.name === $("promptVersion").value,
+  )?.content;
+  return $("prompt").value === original ? null : $("prompt").value;
+}
 function snapshot() {
   for (const id of ["title", "model", "temperature", "maxTokens"])
     if (!$(id).reportValidity()) throw new Error("请修正输入字段。");
@@ -121,9 +129,6 @@ function snapshot() {
     $("start").value > $("deadline").value
   )
     throw new Error("goal.deadline 不能早于 goal.startDate。");
-  const original = versions.find(
-    (version) => version.name === $("promptVersion").value,
-  )?.content;
   return {
     context: {
       locale: $("locale").value,
@@ -137,7 +142,7 @@ function snapshot() {
       },
     },
     options: clone(options()),
-    promptText: $("prompt").value === original ? null : $("prompt").value,
+    promptText: selectedPromptText(),
   };
 }
 function generationRequest(state) {
@@ -160,11 +165,13 @@ function generationRequest(state) {
   };
 }
 function lockInputs() {
-  const locked = Boolean(session);
+  const locked = Boolean(session) || runningCase;
   ["goalFields", "promptFields", "profileFields"].forEach(
     (id) => ($(id).disabled = locked || !initialized),
   );
   $("examples").disabled = locked || !initialized;
+  $("evalCase").disabled = locked || !initialized;
+  $("runCase").disabled = locked || !initialized || !$("evalCase").value;
   $("promptVersion").disabled = locked || !initialized;
   $("resetTasks").disabled = locked || simulatedTasks.length === 0;
 }
@@ -207,7 +214,7 @@ function renderSession() {
     session?.context.goal.title || $("title").value;
   $("goalTaskCount").textContent = `${simulatedTasks.length} 条任务`;
   $("openSession").hidden = Boolean(session) || simulatedTasks.length > 0;
-  $("openSession").disabled = !initialized;
+  $("openSession").disabled = !initialized || runningCase;
   $("closeSession").hidden = !session;
   $("refreshSession").hidden = phase !== "ready";
   $("retrySession").hidden = !["failed", "insufficient"].includes(phase);
@@ -478,6 +485,10 @@ function renderMetrics(container, run) {
 }
 function renderIssues(container, run) {
   container.replaceChildren();
+  if (run.caseEvaluation) {
+    container.append(node("p", formatCaseVerdict(run.caseEvaluation)));
+    container.append(node("p", `人工核对：${run.caseEvaluation.review}`, "hint"));
+  }
   if (run.error) container.append(node("p", run.error.message, "error-box"));
   if (!run.issues.length)
     container.append(
@@ -691,6 +702,56 @@ try {
   }
 } catch {}
 
+function formatCaseVerdict(report) {
+  const labels = {
+    mock: "Mock 联调",
+    passed: "自动断言通过",
+    failed: "自动断言失败",
+    expected_input_rejection: "输入按预期被拒绝，未调用模型",
+    unexpected_input_rejection: "输入被意外拒绝",
+    unexpected_input_acceptance: "应拦截的输入通过了校验",
+    execution_error: "调用失败",
+  };
+  return [report.caseID, labels[report.verdict] || report.verdict, ...report.issues].join(" · ");
+}
+$("evalCase").onchange = () => {
+  const selected = cases.find((item) => item.id === $("evalCase").value);
+  $("caseInput").hidden = !selected;
+  $("caseReview").textContent = selected ? `人工核对：${selected.review}` : "";
+  $("caseInputJson").replaceChildren();
+  if (selected) $("caseInputJson").append(createJsonViewer(selected));
+  $("caseOutcome").replaceChildren();
+  if (currentRun?.case) clearCurrentReport();
+  lockInputs();
+};
+$("runCase").onclick = async () => {
+  if (session || runningCase || !$("evalCase").value) return;
+  runningCase = true;
+  clearCurrentReport();
+  $("caseOutcome").textContent = "用例运行中…";
+  renderSession();
+  try {
+    const report = await api(`/lab/cases/${encodeURIComponent($("evalCase").value)}/run`, "POST", {
+      options: options(), promptText: selectedPromptText(), source: "browser",
+    });
+    const outcome = $("caseOutcome");
+    outcome.replaceChildren(node("p", formatCaseVerdict(report)));
+    if (report.inputErrors) outcome.append(createJsonViewer(report.inputErrors));
+    if (report.runID) {
+      const run = await api("/lab/runs/" + report.runID);
+      renderPlans(outcome, run);
+      showRun(run);
+      const link = node("a", "查看本次调用与人工评价");
+      link.href = "#currentReport";
+      outcome.append(link);
+    }
+  } catch (error) {
+    $("caseOutcome").textContent = error.message;
+  } finally {
+    runningCase = false;
+    renderSession();
+  }
+};
 $("openSession").onclick = () => {
   try {
     if (session || simulatedTasks.length) return;
@@ -871,6 +932,7 @@ $("export").onclick = () => {
 };
 const historyUI = createHistoryController({
   api,
+  formatCaseVerdict,
   renderPlans,
   renderIssues,
   renderMetrics,
@@ -891,14 +953,20 @@ $("viewCurrentInHistory").onclick = () => {
   navigate("history");
 };
 async function init() {
-  const [health, currentProfile, prompts, examples] = await Promise.all(
-    ["/health", "/lab/profile", "/lab/prompts", "/lab/examples"].map((path) =>
+  const [health, currentProfile, prompts, examples, catalog] = await Promise.all(
+    ["/health", "/lab/profile", "/lab/prompts", "/lab/examples", "/lab/cases"].map((path) =>
       api(path),
     ),
   );
   profile = currentProfile;
   versions = prompts;
   samples = examples;
+  cases = catalog;
+  for (const item of cases) {
+    const option = node("option", `${item.label} · ${item.id}`);
+    option.value = item.id;
+    $("evalCase").append(option);
+  }
   loadProfileInputs();
   $("connection").textContent = health.apiKeyConfigured
     ? "DEEPSEEK_API_KEY 已配置"

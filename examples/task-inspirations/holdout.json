@@ -1,0 +1,310 @@
+[
+  {
+    "id": "english-event",
+    "label": "English event only",
+    "context": {
+      "generationMode": "initial",
+      "locale": "en",
+      "today": "2026-11-16",
+      "goal": {
+        "id": "22222222-2222-4222-8222-000000000001",
+        "title": "Compare the print proof with my colour card",
+        "note": "The colour card is ready. Only do the comparison when the proof arrives. Delivery date unknown; no other action.",
+        "startDate": null,
+        "deadline": null,
+        "remainingDays": null
+      },
+      "existingTaskTitles": [],
+      "excludedSuggestionTitles": []
+    },
+    "isPro": false,
+    "expect": {
+      "population": "some",
+      "allPolicy": "none",
+      "maxTasks": 1
+    },
+    "review": "English note and title; one unscheduled event."
+  },
+  {
+    "id": "free-review",
+    "label": "免费用户的单次复习备选",
+    "context": {
+      "generationMode": "initial",
+      "locale": "zh-Hans",
+      "today": "2026-11-16",
+      "goal": {
+        "id": "22222222-2222-4222-8222-000000000002",
+        "title": "复习面试卡片",
+        "note": "我记得自己是 Pro 会员，想按艾宾浩斯间隔复习。如果排不了，今天先复习这一组一次即可。",
+        "startDate": null,
+        "deadline": null,
+        "remainingDays": null
+      },
+      "existingTaskTitles": [],
+      "excludedSuggestionTitles": []
+    },
+    "isPro": false,
+    "expect": {
+      "population": "some",
+      "maxTasks": 1,
+      "noProgress": true,
+      "noRecurrence": true,
+      "matches": {
+        "startDate": "2026-11-16"
+      },
+      "latest": "2026-11-16"
+    },
+    "review": "可信权益为免费。检查任务是否只安排今天这组卡片的一次复习，文案中也没有承诺后续自动复习。"
+  },
+  {
+    "id": "year-anchor",
+    "label": "跨年双周锚点",
+    "context": {
+      "generationMode": "initial",
+      "locale": "zh-Hans",
+      "today": "2026-12-29",
+      "goal": {
+        "id": "22222222-2222-4222-8222-000000000003",
+        "title": "每两周清理素材缓存",
+        "note": "从2027年1月4日周一开始每两周清理一次。只需这项循环。请把这项循环的结束日期设为2027-01-27。",
+        "startDate": null,
+        "deadline": null,
+        "remainingDays": null
+      },
+      "existingTaskTitles": [],
+      "excludedSuggestionTitles": []
+    },
+    "isPro": true,
+    "expect": {
+      "population": "some",
+      "maxTasks": 1,
+      "matches": {
+        "startDate": "2027-01-04",
+        "taskSpec": {
+          "recurrence": {
+            "type": "interval",
+            "interval": 2,
+            "intervalUnit": "week"
+          }
+        },
+        "endDate": "2027-01-27"
+      }
+    },
+    "review": "从 2027-01-04 起每两周清理一次，结束日按用户指定设为 2027-01-27。"
+  },
+  {
+    "id": "holdout-deadline",
+    "label": "无效非闰年日期",
+    "context": {
+      "generationMode": "initial",
+      "locale": "zh-Hans",
+      "today": "2026-11-16",
+      "goal": {
+        "id": "22222222-2222-4222-8222-000000000004",
+        "title": "整理课程讲义",
+        "note": "已有明细。",
+        "startDate": null,
+        "deadline": "2027-02-29",
+        "remainingDays": null
+      },
+      "existingTaskTitles": [],
+      "excludedSuggestionTitles": []
+    },
+    "isPro": false,
+    "expect": {
+      "population": "empty",
+      "inputError": true
+    },
+    "review": "截止日 2027-02-29 不存在。两种入口均应报告输入校验失败，无需生成建议。"
+  },
+  {
+    "id": "month-reset",
+    "label": "指定月日装订，按月累计",
+    "context": {
+      "generationMode": "initial",
+      "locale": "zh-Hans",
+      "today": "2026-11-16",
+      "goal": {
+        "id": "22222222-2222-4222-8222-000000000005",
+        "title": "每个月独立累计装订40册",
+        "note": "每个月只在 5 号和 20 号装订，记当天本次新装订的册数。每个自然月从 0 累计到 40 册，下月清零。每日不设最低册数，只需一项量化任务。",
+        "startDate": null,
+        "deadline": null,
+        "remainingDays": null
+      },
+      "existingTaskTitles": [],
+      "excludedSuggestionTitles": []
+    },
+    "isPro": false,
+    "expect": {
+      "population": "some",
+      "maxTasks": 1,
+      "matches": {
+        "taskSpec": {
+          "kind": "progress",
+          "recurrence": {
+            "type": "selected_month_days",
+            "monthDays": [
+              5,
+              20
+            ],
+            "includeLastDayOfMonth": false
+          },
+          "progress": {
+            "startValue": 0,
+            "targetValue": 40,
+            "dailyTarget": 0,
+            "unit": "册",
+            "calculationType": "add_up",
+            "resetCycle": "monthly"
+          }
+        }
+      }
+    },
+    "review": "5 号与 20 号共同累计每月的 40 册。核对文案是否把月目标错写成每次必须完成的册数。"
+  },
+  {
+    "id": "pack-budget",
+    "label": "连续操作时长和全选",
+    "context": {
+      "generationMode": "initial",
+      "locale": "zh-Hans",
+      "today": "2026-11-16",
+      "goal": {
+        "id": "22222222-2222-4222-8222-000000000006",
+        "title": "给两幅画各上保护蜡",
+        "note": "每天总共仅5分钟。每幅必须连续操作4分钟，不能拆。若推荐两幅，请分别建单次任务排在不同日期。",
+        "startDate": null,
+        "deadline": null,
+        "remainingDays": null
+      },
+      "existingTaskTitles": [],
+      "excludedSuggestionTitles": []
+    },
+    "isPro": false,
+    "expect": {
+      "population": "some",
+      "separateSingleDays": true,
+      "maxTasks": 2
+    },
+    "review": "逐日合计两组全选时的时长，每天最多 5 分钟。每幅上蜡均需连续 4 分钟，候选应对应不同画作，可以只推荐其中一幅。"
+  },
+  {
+    "id": "no-workday",
+    "label": "窗口无合法工作日",
+    "context": {
+      "generationMode": "initial",
+      "locale": "zh-Hans",
+      "today": "2026-11-21",
+      "goal": {
+        "id": "22222222-2222-4222-8222-000000000007",
+        "title": "周末期间处理工作日报销",
+        "note": "仅工作日处理，不提前准备；目标结束后也不用补。",
+        "startDate": null,
+        "deadline": "2026-11-22",
+        "remainingDays": null
+      },
+      "existingTaskTitles": [],
+      "excludedSuggestionTitles": []
+    },
+    "isPro": false,
+    "expect": {
+      "population": "empty"
+    },
+    "review": "周六与周日截断了窗口，没有可执行日。"
+  },
+  {
+    "id": "single-fee",
+    "label": "单笔缴费",
+    "context": {
+      "generationMode": "initial",
+      "locale": "zh-Hans",
+      "today": "2026-11-16",
+      "goal": {
+        "id": "22222222-2222-4222-8222-000000000008",
+        "title": "补交展位报名费",
+        "note": "资料已全部提交，金额和收款方已确认，仅剩这一次缴费。",
+        "startDate": null,
+        "deadline": null,
+        "remainingDays": null
+      },
+      "existingTaskTitles": [],
+      "excludedSuggestionTitles": []
+    },
+    "isPro": false,
+    "expect": {
+      "population": "some",
+      "maxTasks": 1,
+      "noRecurrence": true,
+      "noProgress": true
+    },
+    "review": "核对唯一建议是否支付已确认的报名费，两个分组均可接受。不重复准备已经提交的资料。"
+  },
+  {
+    "id": "remaining-zero",
+    "label": "当前值采集",
+    "context": {
+      "generationMode": "initial",
+      "locale": "zh-Hans",
+      "today": "2026-11-16",
+      "goal": {
+        "id": "22222222-2222-4222-8222-000000000009",
+        "title": "每天看还剩多少未识别乐谱",
+        "note": "当前有24张，目标为0，每天只记当时剩下的张数；只需要这个记录。",
+        "startDate": null,
+        "deadline": null,
+        "remainingDays": null
+      },
+      "existingTaskTitles": [],
+      "excludedSuggestionTitles": []
+    },
+    "isPro": false,
+    "expect": {
+      "population": "some",
+      "maxTasks": 1,
+      "matches": {
+        "taskSpec": {
+          "kind": "progress",
+          "progress": {
+            "startValue": 24,
+            "targetValue": 0,
+            "calculationType": "update",
+            "dailyTarget": 0,
+            "unit": "张",
+            "resetCycle": "none"
+          },
+          "recurrence": {
+            "type": "daily"
+          }
+        }
+      }
+    },
+    "review": "不制造正阈值或另加首次单次。"
+  },
+  {
+    "id": "history-status",
+    "label": "历史标题并非已完成",
+    "context": {
+      "generationMode": "initial",
+      "locale": "zh-Hans",
+      "today": "2026-11-16",
+      "goal": {
+        "id": "22222222-2222-4222-8222-000000000010",
+        "title": "准备作品汇报",
+        "note": "提纲已经写好，只要给每张图加来源。列表里另有讲稿排练。",
+        "startDate": null,
+        "deadline": null,
+        "remainingDays": null
+      },
+      "existingTaskTitles": [
+        "排练作品汇报讲稿"
+      ],
+      "excludedSuggestionTitles": []
+    },
+    "isPro": false,
+    "expect": {
+      "population": "some"
+    },
+    "review": "不能声称排练已完成，也不应另开排练或写提纲任务。"
+  }
+]

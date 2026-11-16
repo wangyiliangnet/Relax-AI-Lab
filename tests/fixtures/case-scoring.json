@@ -1,0 +1,512 @@
+[
+  {
+    "name": "month-end",
+    "case": "free-monthend",
+    "issues": [],
+    "output": {
+      "plans": [
+        {
+          "planType": "quick_start",
+          "suggestions": []
+        },
+        {
+          "planType": "advanced",
+          "suggestions": [
+            {
+              "title": "每月最后一天核对账单",
+              "note": "到月末当天，把当月现有账单逐项核对一遍，其他日期不用处理。",
+              "datePolicy": "explicit",
+              "startDate": "2026-11-30",
+              "endDate": "2026-12-15",
+              "taskSpec": {
+                "kind": "normal",
+                "recurrence": {
+                  "type": "selected_month_days",
+                  "weekdays": [],
+                  "monthDays": [],
+                  "includeLastDayOfMonth": true
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "meaningless-goal",
+    "case": "noise",
+    "issues": [],
+    "output": {
+      "plans": [
+        {
+          "planType": "quick_start",
+          "suggestions": []
+        },
+        {
+          "planType": "advanced",
+          "suggestions": []
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-to-zero",
+    "case": "quantity-update",
+    "issues": [],
+    "output": {
+      "plans": [
+        {
+          "planType": "quick_start",
+          "suggestions": [
+            {
+              "title": "清点并记录剩余底片张数",
+              "note": "把待扫描底片归到一起，数一遍当前剩余张数并记下，作为之后每天填写的起点。",
+              "datePolicy": "explicit",
+              "startDate": "2026-11-16",
+              "endDate": "2026-11-16"
+            }
+          ]
+        },
+        {
+          "planType": "advanced",
+          "suggestions": [
+            {
+              "title": "每天填写底片剩余张数",
+              "note": "每天扫描后把当时剩余张数填到记录里，直到剩0张；不设每日最低变化。",
+              "datePolicy": "explicit",
+              "startDate": "2026-11-16",
+              "endDate": "2026-12-15",
+              "taskSpec": {
+                "kind": "progress",
+                "recurrence": {
+                  "type": "daily",
+                  "weekdays": [],
+                  "monthDays": [],
+                  "includeLastDayOfMonth": false
+                },
+                "progress": {
+                  "startValue": 80,
+                  "targetValue": 0,
+                  "dailyTarget": 0,
+                  "unit": "张",
+                  "calculationType": "update",
+                  "resetCycle": "none"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "partial-free-response",
+    "case": "free-flag",
+    "issues": [
+      "plans[1].suggestions[0]: filtered_task"
+    ],
+    "output": {
+      "plans": [
+        {
+          "planType": "quick_start",
+          "suggestions": [
+            {
+              "title": "完成首次画稿备份",
+              "note": "把当前画稿复制到已有的备份位置，作为第一次备份。",
+              "datePolicy": "explicit",
+              "startDate": "2026-11-16",
+              "endDate": "2026-11-16"
+            }
+          ]
+        },
+        {
+          "planType": "advanced",
+          "suggestions": [
+            {
+              "title": "每隔三天备份一次画稿",
+              "note": "从今天首次备份后算起，每三天把最新画稿复制到备份位置一次。",
+              "datePolicy": "explicit",
+              "startDate": "2026-11-19",
+              "endDate": "2026-12-15",
+              "taskSpec": {
+                "kind": "normal",
+                "recurrence": {
+                  "type": "interval",
+                  "weekdays": [],
+                  "monthDays": [],
+                  "includeLastDayOfMonth": false,
+                  "interval": 3,
+                  "intervalUnit": "day"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "overlong-window",
+    "case": "pro-anchor",
+    "issues": [
+      "missing_requested_configuration"
+    ],
+    "output": {
+      "plans": [
+        {
+          "planType": "quick_start",
+          "suggestions": []
+        },
+        {
+          "planType": "advanced",
+          "suggestions": [
+            {
+              "title": "每两周周三备份作品集",
+              "note": "从11月25日起，每逢隔周周三把作品集备份到已有存储位置。",
+              "datePolicy": "explicit",
+              "startDate": "2026-11-25",
+              "endDate": "2026-12-16",
+              "taskSpec": {
+                "kind": "normal",
+                "recurrence": {
+                  "type": "interval",
+                  "weekdays": [],
+                  "monthDays": [],
+                  "includeLastDayOfMonth": false,
+                  "interval": 2,
+                  "intervalUnit": "week"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "reversed-task-dates",
+    "case": "no-month-hit",
+    "issues": [
+      "plans[1].suggestions[0]: invalid_task"
+    ],
+    "output": {
+      "plans": [
+        {
+          "planType": "quick_start",
+          "suggestions": []
+        },
+        {
+          "planType": "advanced",
+          "suggestions": [
+            {
+              "title": "每月最后一天核对账单",
+              "note": "在当天核对本期账单的金额与明细，只做这一件事。",
+              "datePolicy": "explicit",
+              "startDate": "2027-01-31",
+              "endDate": "2027-01-30",
+              "taskSpec": {
+                "kind": "normal",
+                "recurrence": {
+                  "type": "selected_month_days",
+                  "weekdays": [],
+                  "monthDays": [],
+                  "includeLastDayOfMonth": true
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "missing-event",
+    "case": "event",
+    "issues": [
+      "population"
+    ],
+    "output": {
+      "plans": [
+        {
+          "planType": "quick_start",
+          "suggestions": []
+        },
+        {
+          "planType": "advanced",
+          "suggestions": []
+        }
+      ]
+    }
+  },
+  {
+    "name": "wrong-language",
+    "case": "english",
+    "issues": [
+      "english_field_entirely_cjk"
+    ],
+    "output": {
+      "plans": [
+        {
+          "planType": "quick_start",
+          "suggestions": [
+            {
+              "title": "整理小册子内页页序",
+              "note": "把已完成的内页按阅读顺序摊开核对一遍。",
+              "datePolicy": "explicit",
+              "startDate": "2026-11-16",
+              "endDate": "2026-11-16"
+            }
+          ]
+        },
+        {
+          "planType": "advanced",
+          "suggestions": [
+            {
+              "title": "对齐封面与内页页码",
+              "note": "把封面放到内页最前，确认页码顺序与封面方向一致。",
+              "datePolicy": "explicit",
+              "startDate": "2026-11-17",
+              "endDate": "2026-11-17"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "unauthorized",
+    "case": "noise",
+    "issues": [
+      "upstream_http"
+    ],
+    "error": "upstream_http"
+  },
+  {
+    "name": "truncated",
+    "case": "noise",
+    "issues": [
+      "output_truncated"
+    ],
+    "finishReason": "length",
+    "content": "{"
+  },
+  {
+    "name": "unreadable",
+    "case": "noise",
+    "issues": [
+      "invalid_json"
+    ],
+    "content": "hello"
+  },
+  {
+    "name": "missing-groups",
+    "case": "noise",
+    "issues": [
+      "invalid_plan_groups"
+    ],
+    "output": {
+      "plans": []
+    }
+  },
+  {
+    "name": "duplicate-first-weekend",
+    "case": "weekends",
+    "issues": [
+      "case_count"
+    ],
+    "output": {
+      "plans": [
+        {
+          "planType": "quick_start",
+          "suggestions": [
+            {
+              "title": "查看阳台绿植叶片状态",
+              "note": "本周六到阳台逐盆看一遍叶片，记下颜色和有无异常。",
+              "datePolicy": "explicit",
+              "startDate": "2026-11-21",
+              "endDate": "2026-11-21"
+            }
+          ]
+        },
+        {
+          "planType": "advanced",
+          "suggestions": [
+            {
+              "title": "每周六周日观察绿植叶片",
+              "note": "每次到阳台逐盆查看叶片，用手机或本子记下变化。",
+              "datePolicy": "explicit",
+              "startDate": "2026-11-21",
+              "endDate": "2026-12-15",
+              "taskSpec": {
+                "kind": "normal",
+                "recurrence": {
+                  "type": "selected_weekdays",
+                  "weekdays": [
+                    "saturday",
+                    "sunday"
+                  ],
+                  "monthDays": [],
+                  "includeLastDayOfMonth": false
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "weekend-only",
+    "case": "weekends",
+    "issues": [],
+    "output": {
+      "plans": [
+        {
+          "planType": "quick_start",
+          "suggestions": []
+        },
+        {
+          "planType": "advanced",
+          "suggestions": [
+            {
+              "title": "每周六周日观察绿植叶片",
+              "note": "每次到阳台逐盆查看叶片，用手机或本子记下变化。",
+              "datePolicy": "explicit",
+              "startDate": "2026-11-21",
+              "endDate": "2026-12-15",
+              "taskSpec": {
+                "kind": "normal",
+                "recurrence": {
+                  "type": "selected_weekdays",
+                  "weekdays": [
+                    "saturday",
+                    "sunday"
+                  ],
+                  "monthDays": [],
+                  "includeLastDayOfMonth": false
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "single-purchase",
+    "case": "required-purchase",
+    "issues": [],
+    "output": {
+      "plans": [
+        {
+          "planType": "quick_start",
+          "suggestions": []
+        },
+        {
+          "planType": "advanced",
+          "suggestions": [
+            {
+              "title": "按已选车次完成订票",
+              "note": "用已选好的车次信息完成订票，订好后保存订单信息。",
+              "datePolicy": "explicit",
+              "startDate": "2026-11-16",
+              "endDate": "2026-11-16"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "purchase-as-starter",
+    "case": "required-purchase",
+    "issues": [],
+    "output": {
+      "plans": [
+        {
+          "planType": "quick_start",
+          "suggestions": [
+            {
+              "title": "按已选车次订好火车票",
+              "note": "用现有车次信息完成订票，并把出发时间和座位信息记下来。",
+              "datePolicy": "explicit",
+              "startDate": "2026-11-16",
+              "endDate": "2026-11-16"
+            }
+          ]
+        },
+        {
+          "planType": "advanced",
+          "suggestions": []
+        }
+      ]
+    }
+  },
+  {
+    "name": "budget-on-separate-dates",
+    "case": "budget",
+    "issues": [],
+    "output": {
+      "plans": [
+        {
+          "planType": "quick_start",
+          "suggestions": []
+        },
+        {
+          "planType": "advanced",
+          "suggestions": [
+            {
+              "title": "练习第一段节奏",
+              "note": "用已有材料连续练满4分钟，不缩短单段。",
+              "datePolicy": "explicit",
+              "startDate": "2026-11-16",
+              "endDate": "2026-11-16"
+            },
+            {
+              "title": "练习第二段节奏",
+              "note": "另选一天连续练满4分钟，不缩短单段。",
+              "datePolicy": "explicit",
+              "startDate": "2026-11-17",
+              "endDate": "2026-11-17"
+            },
+            {
+              "title": "练习第三段节奏",
+              "note": "再选一天连续练满4分钟，不缩短单段。",
+              "datePolicy": "explicit",
+              "startDate": "2026-11-18",
+              "endDate": "2026-11-18"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "budget-in-multiple-day-task",
+    "case": "budget",
+    "issues": [
+      "case_separate_single_days"
+    ],
+    "output": {
+      "plans": [
+        {
+          "planType": "quick_start",
+          "suggestions": []
+        },
+        {
+          "planType": "advanced",
+          "suggestions": [
+            {
+              "title": "分段完成三段节奏练习",
+              "note": "每天只安排一段连续4分钟的练习，三段分到不同日期完成，不缩短单段时长。",
+              "datePolicy": "explicit",
+              "startDate": "2026-11-16",
+              "endDate": "2026-11-18"
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

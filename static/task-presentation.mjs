@@ -118,9 +118,9 @@ export function taskFacts(task, goal = {}) {
     facts.push({
       label: "每日完成条件",
       value:
-        progress.dailyTarget > 0
-          ? `至少 ${numberText(progress.dailyTarget)}${unit}`
-          : "记录即算完成",
+        progress.dailyTarget === 0
+          ? "记录即算完成"
+          : `${progress.startValue < progress.targetValue ? "至少" : "至多"} ${numberText(progress.dailyTarget)}${unit}`,
     });
   }
   return facts;

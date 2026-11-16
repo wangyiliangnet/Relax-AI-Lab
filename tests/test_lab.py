@@ -152,7 +152,14 @@ def test_progress_and_recurrence_boundaries():
     task = sample_task(
         taskSpec={
             "kind": "progress",
-            "recurrence": None,
+            "recurrence": {
+                "type": "daily",
+                "weekdays": [],
+                "monthDays": [],
+                "includeLastDayOfMonth": False,
+                "interval": None,
+                "intervalUnit": None,
+            },
             "progress": {
                 "startValue": 0,
                 "targetValue": 30,
@@ -167,8 +174,7 @@ def test_progress_and_recurrence_boundaries():
     for key, value in [
         ("dailyTarget", 0.12),
         ("targetValue", float("inf")),
-        ("targetValue", 0),
-        ("resetCycle", "daily"),
+        ("targetValue", "30"),
     ]:
         invalid = copy.deepcopy(task)
         invalid["taskSpec"]["progress"][key] = value

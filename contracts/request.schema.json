@@ -53,6 +53,8 @@
         "remainingDays": {
           "anyOf": [
             {
+              "exclusiveMaximum": 9223372036854775808,
+              "minimum": -9223372036854775808,
               "type": "integer"
             },
             {
@@ -96,7 +98,6 @@
     },
     "existingTaskTitles": {
       "items": {
-        "maxLength": 500,
         "minLength": 1,
         "type": "string"
       },
@@ -106,7 +107,6 @@
     },
     "excludedSuggestionTitles": {
       "items": {
-        "maxLength": 500,
         "minLength": 1,
         "type": "string"
       },

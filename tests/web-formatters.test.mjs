@@ -196,6 +196,8 @@ test("quantity parameters include decrease, reset and zero daily target", () => 
   assert.equal(facts(value).进度计算方式, "更新");
   assert.equal(facts(value).进度重置周期, "不重置");
   assert.equal(facts(value).每日完成条件, "记录即算完成");
+  value.taskSpec.progress.dailyTarget = -0.5;
+  assert.equal(facts(value).每日完成条件, "至多 -0.5 kg");
   Object.assign(value.taskSpec.progress, {
     startValue: 0,
     targetValue: 1000,

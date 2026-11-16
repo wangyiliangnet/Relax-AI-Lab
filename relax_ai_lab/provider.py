@@ -107,7 +107,7 @@ def mock_response(request: GenerationRequest):
             "累计完成五次实践" if chinese else "Complete five practice sessions",
             {
                 "kind": "progress",
-                "recurrence": None,
+                "recurrence": {"type": "daily"},
                 "progress": {
                     "startValue": 0,
                     "targetValue": 5,
