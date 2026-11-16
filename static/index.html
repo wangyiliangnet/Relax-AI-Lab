@@ -30,6 +30,7 @@
     <nav class="site-nav" aria-label="主导航">
       <a href="/deployment" data-page-link="deployment">项目部署</a
       ><a href="/prompts" data-page-link="prompts">Prompt 与模型参数</a
+      ><a href="/cases" data-page-link="cases">用例评测</a
       ><a href="/simulate" data-page-link="simulate">目标与任务模拟</a
       ><a href="/history" data-page-link="history">历史与对比</a
       ><a href="/costs" data-page-link="costs">AI 开支</a>
@@ -60,7 +61,8 @@
             </p>
             <pre>
 uv sync --locked
-uv run python -m relax_ai_lab --host 0.0.0.0 --port 8765</pre>
+uv run python -m relax_ai_lab --host 0.0.0.0 --port 8765</pre
+            >
             <p id="listenInfo" class="hint"></p>
             <details class="small-details">
               <summary>其他启动方式</summary>
@@ -120,15 +122,19 @@ uv run python -m relax_ai_lab --host 0.0.0.0 --port 8765</pre>
             <h1>Prompt 与模型参数</h1>
             <p>编辑生成配置，保存可复用的 Prompt 版本。</p>
           </div>
-          <a class="button primary" href="/simulate" data-page-link="simulate"
-            >去模拟目标测试 →</a
-          >
+          <div class="button-row compact-actions">
+            <a
+              class="button secondary"
+              href="/simulate"
+              data-page-link="simulate"
+              >模拟 App 流程</a
+            >
+            <a class="button primary" href="/cases" data-page-link="cases"
+              >用固定用例评测 →</a
+            >
+          </div>
         </div>
-        <div id="promptLockNotice" class="notice" hidden>
-          当前会话已固定配置。<a href="/simulate" data-page-link="simulate"
-            >返回会话</a
-          >结束后可继续编辑。
-        </div>
+        <div id="promptLockNotice" class="notice" hidden></div>
         <fieldset id="promptFields">
           <div class="prompt-grid">
             <article class="box prompt-editor">
@@ -252,16 +258,140 @@ uv run python -m relax_ai_lab --host 0.0.0.0 --port 8765</pre>
         </div>
       </section>
 
+      <section id="page-cases" class="page-view" data-page="cases" hidden>
+        <div class="page-heading">
+          <div>
+            <h1>用例评测</h1>
+            <p>用同一份 Prompt 批量验证固定场景，逐条核对建议与断言。</p>
+          </div>
+          <div class="config-summary">
+            <span id="evaluationConfig"></span>
+            <a href="/prompts" data-page-link="prompts"
+              >修改 Prompt 与模型配置</a
+            >
+          </div>
+        </div>
+        <div id="evaluationSessionNotice" class="notice" hidden>
+          目标模拟会话进行中。<a href="/simulate" data-page-link="simulate"
+            >返回并关闭会话</a
+          >后即可运行评测，已选用例会保留。
+        </div>
+        <div class="evaluation-actionbar box">
+          <div>
+            <strong id="caseSelectionCount">选择要评测的用例</strong>
+            <p id="evaluationHint" class="hint">
+              可多选用例；每条使用自己的固定输入和模拟权益。
+            </p>
+          </div>
+          <div class="button-row compact-actions">
+            <button id="exportCases" class="secondary" disabled>
+              导出本批结果
+            </button>
+            <button id="stopCases" class="secondary" hidden>
+              停止后续用例
+            </button>
+            <button id="runCases" class="primary" disabled>运行所选用例</button>
+          </div>
+        </div>
+        <section
+          id="evaluationProgress"
+          class="box evaluation-progress"
+          aria-label="本批评测"
+          hidden
+        >
+          <div class="section-head">
+            <h2 id="batchHeading">本批评测</h2>
+            <span
+              id="batchProgressText"
+              class="hint"
+              role="status"
+              aria-live="polite"
+            ></span>
+          </div>
+          <p id="batchConfiguration" class="hint"></p>
+          <progress
+            id="batchProgress"
+            value="0"
+            max="1"
+            aria-label="已完成用例"
+          ></progress>
+          <div id="batchCounts" class="evaluation-counts"></div>
+          <p id="batchMessage" class="hint"></p>
+        </section>
+        <div class="evaluation-layout">
+          <section class="box case-library" aria-label="用例库">
+            <div class="box-heading">
+              <h2>
+                用例库 <span id="caseCatalogCount" class="summary-meta"></span>
+              </h2>
+              <span class="hint">多选运行 · 点击名称预览</span>
+            </div>
+            <div class="case-filters">
+              <label class="sr-only" for="caseSearch">搜索用例</label>
+              <input
+                id="caseSearch"
+                type="search"
+                placeholder="搜索场景、目标或用例 ID"
+              />
+              <label class="sr-only" for="caseSuite">用例分组</label>
+              <select id="caseSuite">
+                <option value="all">全部分组</option>
+                <option value="main">主集</option>
+                <option value="holdout">历史留出组</option>
+              </select>
+            </div>
+            <div class="case-selection-tools">
+              <label
+                ><input
+                  id="selectVisibleCases"
+                  type="checkbox"
+                  disabled
+                />全选筛选结果</label
+              >
+              <button id="clearCases" class="link-button" disabled>
+                清空选择
+              </button>
+            </div>
+            <div id="caseList" class="case-list">
+              <p class="hint">正在加载用例…</p>
+            </div>
+          </section>
+          <article
+            id="caseDetail"
+            class="box case-detail"
+            aria-label="用例详情"
+          >
+            <div class="empty">
+              <h3>先看看要验证的场景</h3>
+              <p>点击用例名称查看固定输入与人工检查项，勾选后可批量运行。</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <section id="page-simulate" class="page-view" data-page="simulate" hidden>
         <div class="page-heading">
           <div>
             <h1>目标与任务模拟</h1>
-            <p>按 App 流程生成建议、选择任务并模拟添加。</p>
+            <p>
+              按 App 流程生成建议、选择任务并模拟添加。<a
+                href="/cases"
+                data-page-link="cases"
+                >批量验证 Prompt →</a
+              >
+            </p>
           </div>
           <div class="config-summary">
             <span id="simulationConfig"></span
             ><a href="/prompts" data-page-link="prompts">修改配置</a>
           </div>
+        </div>
+        <div id="simulationEvaluationNotice" class="notice" hidden>
+          用例评测正在运行，完成或停止后可打开模拟会话。<a
+            href="/cases"
+            data-page-link="cases"
+            >查看评测进度 →</a
+          >
         </div>
         <div class="simulation-actionbar">
           <div class="session-controls">
@@ -277,15 +407,6 @@ uv run python -m relax_ai_lab --host 0.0.0.0 --port 8765</pre>
             >未打开会话</span
           >
         </div>
-        <details class="box small-details">
-          <summary>用固定用例验证当前 Prompt</summary>
-          <label for="evalCase">评测用例</label>
-          <select id="evalCase" disabled><option value="">选择用例</option></select>
-          <p id="caseReview" class="hint"></p>
-          <details id="caseInput" hidden><summary>固定输入、权益与自动断言</summary><div id="caseInputJson"></div></details>
-          <button id="runCase" class="secondary" disabled>运行所选用例</button>
-          <div id="caseOutcome" aria-live="polite"></div>
-        </details>
         <div class="simulation-grid">
           <aside class="box goal-card">
             <div class="box-heading">
@@ -303,7 +424,8 @@ uv run python -m relax_ai_lab --host 0.0.0.0 --port 8765</pre>
                 value="三个月后能够进行十分钟的英语日常对话"
               /><label for="note">目标备注 <code>goal.note</code></label
               ><textarea id="note" rows="4">
-目前能读简单句子，工作日每天有 20 分钟。重点是开口表达，不备考。</textarea>
+目前能读简单句子，工作日每天有 20 分钟。重点是开口表达，不备考。</textarea
+              >
               <div class="two">
                 <div>
                   <label for="start">开始日期 <code>startDate</code></label
@@ -524,7 +646,10 @@ uv run python -m relax_ai_lab --host 0.0.0.0 --port 8765</pre>
       </section>
       <section id="page-costs" class="page-view" data-page="costs" hidden>
         <div class="page-heading">
-          <div><h1>AI 开支</h1><p>按 Provider、Prompt 版本与模型统计全部调用。</p></div>
+          <div>
+            <h1>AI 开支</h1>
+            <p>按 Provider、Prompt 版本与模型统计全部调用。</p>
+          </div>
           <button id="reloadCosts" class="secondary">刷新统计</button>
         </div>
         <p id="costLoadState" class="hint" role="status"></p>
@@ -532,36 +657,136 @@ uv run python -m relax_ai_lab --host 0.0.0.0 --port 8765</pre>
         <p id="costCoverage" class="hint"></p>
         <article class="box">
           <div class="box-heading"><h2>版本费用汇总</h2></div>
-          <p class="hint">同一版本的不同 Prompt 指纹和草稿分别统计。模型返回用量后，即使建议校验失败也计入费用。</p>
-          <div class="cost-table-scroll" tabindex="0" role="region" aria-label="版本费用汇总表，可横向滚动">
+          <p class="hint">
+            同一版本的不同 Prompt
+            指纹和草稿分别统计。模型返回用量后，即使建议校验失败也计入费用。
+          </p>
+          <div
+            class="cost-table-scroll"
+            tabindex="0"
+            role="region"
+            aria-label="版本费用汇总表，可横向滚动"
+          >
             <table class="cost-table">
-              <thead><tr><th scope="col">Provider</th><th scope="col">Prompt / 指纹</th><th scope="col">模型</th><th scope="col">单价时段</th><th scope="col">调用数</th><th scope="col">输入 / 输出 tokens</th><th scope="col">已知估算 · CNY</th><th scope="col">估算 / 未计费 / 未知 / 进行中</th></tr></thead>
+              <thead>
+                <tr>
+                  <th scope="col">Provider</th>
+                  <th scope="col">Prompt / 指纹</th>
+                  <th scope="col">模型</th>
+                  <th scope="col">单价时段</th>
+                  <th scope="col">调用数</th>
+                  <th scope="col">输入 / 输出 tokens</th>
+                  <th scope="col">已知估算 · CNY</th>
+                  <th scope="col">估算 / 未计费 / 未知 / 进行中</th>
+                </tr>
+              </thead>
               <tbody id="costRows"></tbody>
             </table>
           </div>
-          <p id="costEmpty" class="empty">暂无调用记录。生成后在这里查看费用。</p>
+          <p id="costEmpty" class="empty">
+            暂无调用记录。生成后在这里查看费用。
+          </p>
         </article>
         <article class="box cost-pricing">
-          <div class="box-heading"><h2>调用单价</h2><a href="https://api-docs.deepseek.com/zh-cn/quick_start/pricing" target="_blank" rel="noreferrer">DeepSeek 官方价格 ↗</a></div>
-          <p class="hint">内置 DeepSeek 高峰期、DeepSeek 空闲时段、全时段三种单价版本。Flash 和 Pro 已内置官方高峰/空闲价格（2026-11-07 核对），按调用开始的北京时间及中国节假日日历自动选择。单位为元 / 百万 tokens。</p>
+          <div class="box-heading">
+            <h2>调用单价</h2>
+            <a
+              href="https://api-docs.deepseek.com/zh-cn/quick_start/pricing"
+              target="_blank"
+              rel="noreferrer"
+              >DeepSeek 官方价格 ↗</a
+            >
+          </div>
+          <p class="hint">
+            内置 DeepSeek 高峰期、DeepSeek 空闲时段、全时段三种单价版本。Flash
+            和 Pro 已内置官方高峰/空闲价格（2026-11-07
+            核对），按调用开始的北京时间及中国节假日日历自动选择。单位为元 /
+            百万 tokens。
+          </p>
           <p id="pricingSchedule" class="hint" role="status"></p>
           <div id="pricingRules"></div>
-          <p class="hint">内置及自定义价格均可删除，刷新或重启后保持删除。删除仅影响后续调用，历史费用快照保留；无其他匹配价格时费用为未知。可在下方重新填写并保存价格。</p>
+          <p class="hint">
+            内置及自定义价格均可删除，刷新或重启后保持删除。删除仅影响后续调用，历史费用快照保留；无其他匹配价格时费用为未知。可在下方重新填写并保存价格。
+          </p>
           <form id="pricingForm">
             <div class="two">
-              <div><label for="priceModel">DeepSeek 模型 ID</label><input id="priceModel" list="modelList" value="deepseek-flash" pattern="[a-zA-Z0-9._-]{1,100}" required /></div>
-              <div><label for="pricePeriod">单价版本</label><select id="pricePeriod"><option value="deepseek_peak">DeepSeek 高峰期</option><option value="deepseek_off_peak">DeepSeek 空闲时段</option><option value="all_day">全时段</option></select></div>
+              <div>
+                <label for="priceModel">DeepSeek 模型 ID</label
+                ><input
+                  id="priceModel"
+                  list="modelList"
+                  value="deepseek-flash"
+                  pattern="[a-zA-Z0-9._-]{1,100}"
+                  required
+                />
+              </div>
+              <div>
+                <label for="pricePeriod">单价版本</label
+                ><select id="pricePeriod">
+                  <option value="deepseek_peak">DeepSeek 高峰期</option>
+                  <option value="deepseek_off_peak">DeepSeek 空闲时段</option>
+                  <option value="all_day">全时段</option>
+                </select>
+              </div>
             </div>
-            <div><label for="priceLabel">价格标签</label><input id="priceLabel" placeholder="例如：2026-11-07 官方价格" maxlength="120" required /></div>
+            <div>
+              <label for="priceLabel">价格标签</label
+              ><input
+                id="priceLabel"
+                placeholder="例如：2026-11-07 官方价格"
+                maxlength="120"
+                required
+              />
+            </div>
             <div class="price-inputs">
-              <div><label for="priceHit">输入 · 缓存命中</label><input id="priceHit" type="number" min="0" max="1000000" step="0.00000001" required /></div>
-              <div><label for="priceMiss">输入 · 缓存未命中</label><input id="priceMiss" type="number" min="0" max="1000000" step="0.00000001" required /></div>
-              <div><label for="priceOutput">输出</label><input id="priceOutput" type="number" min="0" max="1000000" step="0.00000001" required /></div>
+              <div>
+                <label for="priceHit">输入 · 缓存命中</label
+                ><input
+                  id="priceHit"
+                  type="number"
+                  min="0"
+                  max="1000000"
+                  step="0.00000001"
+                  required
+                />
+              </div>
+              <div>
+                <label for="priceMiss">输入 · 缓存未命中</label
+                ><input
+                  id="priceMiss"
+                  type="number"
+                  min="0"
+                  max="1000000"
+                  step="0.00000001"
+                  required
+                />
+              </div>
+              <div>
+                <label for="priceOutput">输出</label
+                ><input
+                  id="priceOutput"
+                  type="number"
+                  min="0"
+                  max="1000000"
+                  step="0.00000001"
+                  required
+                />
+              </div>
             </div>
-            <button id="savePricing" class="primary" type="submit">保存此模型与时段单价</button>
+            <button id="savePricing" class="primary" type="submit">
+              保存此模型与时段单价
+            </button>
           </form>
-          <p class="hint">全时段价格适用于每天 00:00–24:00，需要自行填写；同模型优先使用自定义时段价格，其次是全时段价格，再使用内置价格。高峰为北京时间周一至周五（中国法定节假日除外）09:00–12:00、14:00–18:00，其余为空闲时段，周末补班仍按空闲计。日历暂覆盖 2004–2027 年，超出范围的工作日高峰窗口保留未知。</p>
-          <p class="hint">已有 DeepSeek 调用已按记录时间和内置价格重新估算，详情保留原费用与价格快照。以后调价仅影响后续调用。无匹配价格或缺少用量时为未知；Mock 和明确未发送的请求为零。最终扣费以 Provider 账单为准。</p>
+          <p class="hint">
+            全时段价格适用于每天
+            00:00–24:00，需要自行填写；同模型优先使用自定义时段价格，其次是全时段价格，再使用内置价格。高峰为北京时间周一至周五（中国法定节假日除外）09:00–12:00、14:00–18:00，其余为空闲时段，周末补班仍按空闲计。日历暂覆盖
+            2004–2027 年，超出范围的工作日高峰窗口保留未知。
+          </p>
+          <p class="hint">
+            已有 DeepSeek
+            调用已按记录时间和内置价格重新估算，详情保留原费用与价格快照。以后调价仅影响后续调用。无匹配价格或缺少用量时为未知；Mock
+            和明确未发送的请求为零。最终扣费以 Provider 账单为准。
+          </p>
         </article>
       </section>
     </main>

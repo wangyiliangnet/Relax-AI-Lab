@@ -49,6 +49,7 @@ def create_app(settings: Settings | None = None, provider=None):
 
     @app.get("/deployment", include_in_schema=False)
     @app.get("/prompts", include_in_schema=False)
+    @app.get("/cases", include_in_schema=False)
     @app.get("/simulate", include_in_schema=False)
     @app.get("/history", include_in_schema=False)
     @app.get("/costs", include_in_schema=False)

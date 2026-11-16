@@ -2,6 +2,8 @@ import { taskFacts } from "./task-presentation.mjs";
 import { createJsonViewer, embeddedJSON } from "./json-viewer.mjs";
 import { createHistoryController } from "./history.mjs";
 import { createCostsController, costText } from "./costs.mjs";
+import { createCasesController } from "./cases.mjs";
+import { formatCaseVerdict } from "./case-batch.mjs";
 const $ = (id) => document.getElementById(id);
 const json = (value) => JSON.stringify(value, null, 2);
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -28,7 +30,6 @@ const dateString = (date = new Date()) =>
 let profile,
   versions = [],
   samples = [],
-  cases = [],
   runningCase = false,
   currentRun = null,
   session = null,
@@ -39,6 +40,7 @@ let statusTimer;
 const pages = {
   deployment: "项目部署",
   prompts: "Prompt 与模型参数",
+  cases: "用例评测",
   simulate: "目标与任务模拟",
   history: "历史与对比",
   costs: "AI 开支",
@@ -76,9 +78,21 @@ function syncConfigurationSummary() {
     : $("prompt").value !== original;
   $("simulationConfig").textContent =
     `${selected.promptVersion}${edited ? "（草稿）" : ""} · ${selected.model} · ${selected.provider}`;
+  $("evaluationConfig").textContent = $("simulationConfig").textContent;
   $("previewGoal").textContent =
     `预览目标：${$("title").value || "未命名目标"}`;
-  $("promptLockNotice").hidden = !session;
+  const lockNotice = $("promptLockNotice");
+  lockNotice.hidden = !session && !runningCase;
+  lockNotice.replaceChildren();
+  if (session || runningCase) {
+    lockNotice.append(
+      node("span", session ? "当前会话已固定配置。" : "评测批次已固定配置。"),
+    );
+    const link = node("a", session ? "返回会话" : "查看评测进度");
+    link.href = session ? "/simulate" : "/cases";
+    link.dataset.pageLink = session ? "simulate" : "cases";
+    lockNotice.append(link, node("span", "，结束后可继续编辑。"));
+  }
 }
 function status(text, error = false) {
   clearTimeout(statusTimer);
@@ -170,8 +184,7 @@ function lockInputs() {
     (id) => ($(id).disabled = locked || !initialized),
   );
   $("examples").disabled = locked || !initialized;
-  $("evalCase").disabled = locked || !initialized;
-  $("runCase").disabled = locked || !initialized || !$("evalCase").value;
+  casesUI.sync({ initialized, sessionOpen: Boolean(session) });
   $("promptVersion").disabled = locked || !initialized;
   $("resetTasks").disabled = locked || simulatedTasks.length === 0;
 }
@@ -196,8 +209,11 @@ function renderSession() {
   if (!session && simulatedTasks.length)
     $("sessionPhase").textContent = "已添加任务";
   $("sessionPhase").dataset.phase = phase;
-  $("navSessionState").hidden = !session;
-  $("navSessionState").textContent = `AI 会话 · ${phaseLabels[phase]}`;
+  $("navSessionState").hidden = !session && !runningCase;
+  $("navSessionState").textContent = runningCase
+    ? "用例评测 · 运行中"
+    : `AI 会话 · ${phaseLabels[phase]}`;
+  $("simulationEvaluationNotice").hidden = !runningCase;
   const step = simulatedTasks.length
     ? 3
     : phase === "ready"
@@ -487,7 +503,9 @@ function renderIssues(container, run) {
   container.replaceChildren();
   if (run.caseEvaluation) {
     container.append(node("p", formatCaseVerdict(run.caseEvaluation)));
-    container.append(node("p", `人工核对：${run.caseEvaluation.review}`, "hint"));
+    container.append(
+      node("p", `人工核对：${run.caseEvaluation.review}`, "hint"),
+    );
   }
   if (run.error) container.append(node("p", run.error.message, "error-box"));
   if (!run.issues.length)
@@ -532,7 +550,14 @@ function traceData(run) {
     ["模型生成内容", run.rawResponse?.choices?.[0]?.message?.content ?? null],
     ["返回 App 的响应", run.result],
     ["完整上游响应", run.rawResponse],
-    ["费用与单价快照", { cost: run.cost, pricing: run.pricing, costRevisions: run.costRevisions }],
+    [
+      "费用与单价快照",
+      {
+        cost: run.cost,
+        pricing: run.pricing,
+        costRevisions: run.costRevisions,
+      },
+    ],
   ];
 }
 function renderTrace(container, run) {
@@ -702,59 +727,9 @@ try {
   }
 } catch {}
 
-function formatCaseVerdict(report) {
-  const labels = {
-    mock: "Mock 联调",
-    passed: "自动断言通过",
-    failed: "自动断言失败",
-    expected_input_rejection: "输入按预期被拒绝，未调用模型",
-    unexpected_input_rejection: "输入被意外拒绝",
-    unexpected_input_acceptance: "应拦截的输入通过了校验",
-    execution_error: "调用失败",
-  };
-  return [report.caseID, labels[report.verdict] || report.verdict, ...report.issues].join(" · ");
-}
-$("evalCase").onchange = () => {
-  const selected = cases.find((item) => item.id === $("evalCase").value);
-  $("caseInput").hidden = !selected;
-  $("caseReview").textContent = selected ? `人工核对：${selected.review}` : "";
-  $("caseInputJson").replaceChildren();
-  if (selected) $("caseInputJson").append(createJsonViewer(selected));
-  $("caseOutcome").replaceChildren();
-  if (currentRun?.case) clearCurrentReport();
-  lockInputs();
-};
-$("runCase").onclick = async () => {
-  if (session || runningCase || !$("evalCase").value) return;
-  runningCase = true;
-  clearCurrentReport();
-  $("caseOutcome").textContent = "用例运行中…";
-  renderSession();
-  try {
-    const report = await api(`/lab/cases/${encodeURIComponent($("evalCase").value)}/run`, "POST", {
-      options: options(), promptText: selectedPromptText(), source: "browser",
-    });
-    const outcome = $("caseOutcome");
-    outcome.replaceChildren(node("p", formatCaseVerdict(report)));
-    if (report.inputErrors) outcome.append(createJsonViewer(report.inputErrors));
-    if (report.runID) {
-      const run = await api("/lab/runs/" + report.runID);
-      renderPlans(outcome, run);
-      showRun(run);
-      const link = node("a", "查看本次调用与人工评价");
-      link.href = "#currentReport";
-      outcome.append(link);
-    }
-  } catch (error) {
-    $("caseOutcome").textContent = error.message;
-  } finally {
-    runningCase = false;
-    renderSession();
-  }
-};
 $("openSession").onclick = () => {
   try {
-    if (session || simulatedTasks.length) return;
+    if (session || runningCase || simulatedTasks.length) return;
     session = {
       ...snapshot(),
       phase: "idle",
@@ -939,11 +914,36 @@ const historyUI = createHistoryController({
   renderTrace,
   notify: status,
   onFeedback(run) {
+    casesUI.noteFeedback(run);
     if (currentRun?.id === run.id) {
       currentRun.feedback = run.feedback;
       $("rating").value = run.feedback.rating;
       $("reviewNote").value = run.feedback.note;
     }
+  },
+});
+const casesUI = createCasesController({
+  api,
+  getConfiguration() {
+    for (const id of ["model", "temperature", "maxTokens"])
+      if (!$(id).reportValidity())
+        throw new Error("请在 Prompt 与模型参数页修正配置。");
+    return { options: options(), promptText: selectedPromptText() };
+  },
+  onRunningChange(value) {
+    runningCase = value;
+    renderSession();
+  },
+  renderPlans,
+  renderMetrics,
+  renderTrace,
+  notify: status,
+  onViewHistory(id) {
+    historyUI.focusRecord(id);
+    navigate("history");
+  },
+  onFeedback(run) {
+    historyUI.noteFeedback(run);
   },
 });
 const costsUI = createCostsController({ api, notify: status });
@@ -953,20 +953,20 @@ $("viewCurrentInHistory").onclick = () => {
   navigate("history");
 };
 async function init() {
-  const [health, currentProfile, prompts, examples, catalog] = await Promise.all(
-    ["/health", "/lab/profile", "/lab/prompts", "/lab/examples", "/lab/cases"].map((path) =>
-      api(path),
-    ),
-  );
+  const [health, currentProfile, prompts, examples, catalog] =
+    await Promise.all(
+      [
+        "/health",
+        "/lab/profile",
+        "/lab/prompts",
+        "/lab/examples",
+        "/lab/cases",
+      ].map((path) => api(path)),
+    );
   profile = currentProfile;
   versions = prompts;
   samples = examples;
-  cases = catalog;
-  for (const item of cases) {
-    const option = node("option", `${item.label} · ${item.id}`);
-    option.value = item.id;
-    $("evalCase").append(option);
-  }
+  casesUI.setCatalog(catalog);
   loadProfileInputs();
   $("connection").textContent = health.apiKeyConfigured
     ? "DEEPSEEK_API_KEY 已配置"

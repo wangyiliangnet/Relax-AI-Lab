@@ -1590,6 +1590,266 @@ details.small-details {
 .cost-metrics {
   margin: 20px 0 10px;
 }
+
+/* Fixed-case evaluation uses its own selection, batch and inspection state. */
+.evaluation-actionbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.evaluation-actionbar strong {
+  font-size: 14px;
+}
+.evaluation-actionbar .hint {
+  margin: 5px 0 0;
+}
+.evaluation-progress {
+  margin-bottom: 20px;
+  background: var(--muted-bg);
+}
+.evaluation-progress progress {
+  display: block;
+  width: 100%;
+  height: 7px;
+  margin: 14px 0 18px;
+  accent-color: var(--accent);
+}
+.evaluation-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+}
+.evaluation-count {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.evaluation-count b {
+  color: var(--fg);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.count-passed b {
+  color: var(--success);
+}
+.count-failed b,
+.count-errors b {
+  color: var(--danger);
+}
+.evaluation-layout {
+  display: grid;
+  grid-template-columns: minmax(330px, 0.9fr) minmax(0, 1.5fr);
+  align-items: start;
+  gap: 24px;
+}
+.case-library {
+  padding: 18px 0 0;
+  overflow: hidden;
+}
+.case-library > .box-heading,
+.case-filters,
+.case-selection-tools {
+  margin-left: 18px;
+  margin-right: 18px;
+}
+.case-library > .box-heading > .hint {
+  margin: 0;
+  font-size: 10px;
+}
+.case-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 125px;
+  gap: 10px;
+}
+.case-selection-tools {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+}
+.case-selection-tools label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-weight: 400;
+}
+.case-selection-tools input,
+.case-row > input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.case-list {
+  max-height: 660px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+}
+.case-list > .hint {
+  padding: 0 18px;
+}
+.case-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px 18px 14px 15px;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid var(--border);
+}
+.case-row:last-child {
+  border-bottom: 0;
+}
+.case-row > input {
+  margin: 3px 0 0;
+}
+.case-row:hover,
+.case-row.is-checked {
+  background: var(--muted-bg);
+}
+.case-row.is-selected {
+  border-left-color: var(--accent);
+  background: var(--selected);
+}
+.case-preview {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  text-align: left;
+  color: var(--fg);
+  background: transparent;
+  box-shadow: none;
+  font-weight: 400;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.case-preview:hover {
+  background: transparent;
+}
+.case-preview strong {
+  font-size: 13px;
+}
+.case-goal {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.case-row-meta {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.case-result {
+  font-weight: 600;
+}
+.case-result.status-running {
+  color: var(--accent);
+}
+.case-detail {
+  scroll-margin-top: 18px;
+}
+.case-detail > .empty {
+  margin: 80px 0;
+  border: 0;
+}
+.case-detail h2,
+.case-detail h3 {
+  overflow-wrap: anywhere;
+}
+.case-note {
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.case-review {
+  background: var(--muted-bg);
+  border-radius: 6px;
+  border-left: 3px solid var(--accent);
+  padding: 12px 14px;
+  margin: 18px 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.case-review strong {
+  color: var(--accent);
+}
+.case-review p {
+  margin: 6px 0 0;
+}
+.case-detail .record-section h3 {
+  margin-top: 0;
+}
+.case-issues {
+  padding-left: 20px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+#page-cases .notice {
+  margin-bottom: 20px;
+}
+@media (max-width: 800px) {
+  .evaluation-layout {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .evaluation-actionbar {
+    position: static;
+    align-items: start;
+    flex-direction: column;
+  }
+  .case-list {
+    max-height: 440px;
+  }
+}
+@media (max-width: 480px) {
+  .case-filters {
+    grid-template-columns: 1fr;
+  }
+  .evaluation-actionbar .button-row {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .evaluation-progress .section-head {
+    align-items: start;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .evaluation-progress .section-head .hint {
+    margin: 0;
+  }
+  .evaluation-counts {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .evaluation-count {
+    align-items: start;
+    flex-direction: column;
+    gap: 0;
+  }
+  .case-library > .box-heading {
+    align-items: start;
+    flex-direction: column;
+  }
+}
 .cost-table-scroll {
   overflow-x: auto;
 }
