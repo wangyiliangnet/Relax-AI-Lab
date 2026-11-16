@@ -1,5 +1,6 @@
 import json
 import unicodedata
+from copy import deepcopy
 
 from pydantic import ValidationError
 
@@ -13,6 +14,23 @@ def normalized_title(title):
 
 def reject_constant(value):
     raise ValueError(f"non-finite number: {value}")
+
+
+def restore_recurrence_defaults(item):
+    """Expand omitted model fields into the complete client response contract."""
+    if not isinstance(item, dict):
+        return item
+    task_spec = item.get("taskSpec")
+    if not isinstance(task_spec, dict) or not isinstance(task_spec.get("recurrence"), dict):
+        return item
+    item = deepcopy(item)
+    recurrence = item["taskSpec"]["recurrence"]
+    recurrence.setdefault("weekdays", [])
+    recurrence.setdefault("monthDays", [])
+    recurrence.setdefault("includeLastDayOfMonth", False)
+    recurrence.setdefault("interval", None)
+    recurrence.setdefault("intervalUnit", None)
+    return item
 
 
 def validate_completion(raw: dict, request: GenerationRequest, has_pro: bool):
@@ -54,7 +72,7 @@ def validate_completion(raw: dict, request: GenerationRequest, has_pro: bool):
         for task_index, item in enumerate(plan["suggestions"]):
             item_path = f"{path}.suggestions[{task_index}]"
             try:
-                task = Task.model_validate(item)
+                task = Task.model_validate(restore_recurrence_defaults(item))
                 recurrence = task.taskSpec.recurrence if task.taskSpec else None
                 if not has_pro and recurrence and recurrence.type in {"interval", "ebbinghaus"}:
                     raise ValueError("当前模拟权益为非 Pro，不能使用 interval/ebbinghaus。")
