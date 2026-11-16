@@ -1,13 +1,23 @@
+import math
 import re
 from datetime import date
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+import regex
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator, model_validator
 
 PlanType = Literal["quick_start", "advanced"]
 Weekday = Literal["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-Title = Annotated[str, Field(min_length=1, max_length=500)]
+Title = Annotated[str, Field(min_length=1)]
+
+
+def integral_json_number(value):
+    # JSONDecoder accepts integral JSON numbers such as 2.0 for an Int.
+    return int(value) if isinstance(value, float) and value.is_integer() else value
+
+
+integer_input = BeforeValidator(integral_json_number)
 
 
 def date_only(value: str) -> str:
@@ -23,11 +33,11 @@ class Contract(BaseModel):
 
 class Goal(Contract):
     id: str
-    title: Title
+    title: str = Field(min_length=1, max_length=500)
     note: str | None = Field(default=None, max_length=10000)
     startDate: str | None = None
     deadline: str | None = None
-    remainingDays: int | None = None
+    remainingDays: Annotated[int, Field(ge=-(2**63), lt=2**63), integer_input] | None = None
 
     @field_validator("id")
     @classmethod
@@ -88,9 +98,9 @@ class Recurrence(Contract):
         "ebbinghaus",
     ]
     weekdays: list[Weekday]
-    monthDays: list[Annotated[int, Field(ge=1, le=31)]]
+    monthDays: list[Annotated[int, Field(ge=1, le=31), integer_input]]
     includeLastDayOfMonth: bool
-    interval: Annotated[int, Field(ge=1, le=366)] | None
+    interval: Annotated[int, Field(ge=1, le=366), integer_input] | None
     intervalUnit: Literal["day", "week"] | None
 
     @model_validator(mode="after")
@@ -118,21 +128,33 @@ class Recurrence(Contract):
 class Progress(Contract):
     startValue: float
     targetValue: float
-    dailyTarget: float = Field(ge=0)
-    unit: str = Field(max_length=12)
+    dailyTarget: float = Field(
+        description="Signed daily threshold, preserved at one decimal place.",
+        json_schema_extra={"multipleOf": 0.1},
+    )
+    unit: str = Field(description="At most 12 extended grapheme clusters (Swift Characters).")
     calculationType: Literal["add_up", "update"]
     resetCycle: Literal["none", "daily", "weekly", "monthly"]
 
+    @field_validator("dailyTarget")
+    @classmethod
+    def daily_precision(cls, value):
+        scaled = value * 10
+        if not math.isfinite(scaled) or value != round(scaled) / 10:
+            raise ValueError("dailyTarget must be preserved when rounded to one decimal place")
+        return value
+
+    @field_validator("unit")
+    @classmethod
+    def unit_length(cls, value):
+        if not regex.fullmatch(r"(?:\X){0,12}", value):
+            raise ValueError("unit supports at most 12 extended grapheme clusters")
+        return value
+
     @model_validator(mode="after")
-    def values(self):
-        if self.startValue == self.targetValue:
-            raise ValueError("startValue and targetValue must differ")
-        if self.dailyTarget != round(self.dailyTarget * 10) / 10:
-            raise ValueError("dailyTarget supports at most one decimal place")
-        if self.resetCycle != "none" and (
-            self.startValue != 0 or self.targetValue <= 0 or self.calculationType != "add_up"
-        ):
-            raise ValueError("resetting progress must add up from zero to a positive target")
+    def reset_settings(self):
+        if self.resetCycle != "none" and (self.startValue != 0 or self.calculationType != "add_up"):
+            raise ValueError("resetting progress must add up from zero")
         return self
 
 
@@ -149,6 +171,8 @@ class TaskSpec(Contract):
             if self.progress is None:
                 raise ValueError("progress task requires progress")
             recurrence = self.recurrence.type if self.recurrence else "none"
+            if recurrence == "none":
+                raise ValueError("new progress tasks require a recurrence available in the task editor")
             cycle = self.progress.resetCycle
             if cycle in {"daily", "weekly"} and recurrence not in {"daily", "selected_weekdays"}:
                 raise ValueError("daily/weekly reset requires daily or selected_weekdays recurrence")
@@ -159,7 +183,7 @@ class TaskSpec(Contract):
 
 class Task(Contract):
     title: Title
-    note: str | None = Field(default=None, max_length=10000)
+    note: str | None = None
     datePolicy: Literal["none", "goal_range_if_available", "explicit"]
     startDate: str | None = None
     endDate: str | None = None
@@ -214,10 +238,17 @@ class Profile(Contract):
     creditsPerGeneration: float = Field(default=1, gt=0, le=1000000)
 
 
-class Experiment(Contract):
-    request: GenerationRequest
+class PromptSelection(Contract):
     options: Options
     promptText: str | None = Field(default=None, min_length=1, max_length=30000)
+
+
+class Experiment(PromptSelection):
+    request: GenerationRequest
+
+
+class CaseExecution(PromptSelection):
+    source: Literal["agent", "browser"] = "agent"
 
 
 class PromptVersion(Contract):

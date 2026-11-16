@@ -63,6 +63,35 @@ JSON 查看器支持结构树、格式化文本、语法高亮、展开/折叠�
 
 `advanced` 表示起步后的持续行动，可循环/量化，不要求更难。每组最多 5 条，允许空组；整批至少一条有效建议。
 
+## 固定用例与版本比较
+
+用例保留业务输入、模拟会员身份、自动断言和人工检查项。主集有 54 条，历史留出组有 10 条。历史留出组曾用于调优，统计时保留原分组。用例清单在 [examples/task-inspirations](examples/task-inspirations)。编辑用例后重启服务以加载新清单。
+
+**人工验证**　在「Prompt 与模型参数」选择版本或编辑草稿，进入「目标与任务模拟」，展开「用固定用例验证当前 Prompt」。选择用例后可查看固定日期、已有任务、换批历史和权益。点击「运行所选用例」，对照人工检查项阅读建议，在调用详情保存评价。换版本后再运行同一条，可在「历史与对比」中并排查看。自行填写目标仍走原有的「打开 AI 任务灵感」流程。
+
+**Agent 调用**　启动 Lab 后在仓库根目录运行以下命令。`--list` 输出用例 JSON；`--case`、`--version` 均可重复。省略 `--case` 时执行所选组的全部用例，省略 `--suite` 时使用两组。CLI 固定本批次启动时的模型和采样参数。
+
+```sh
+uv run python -m scripts.evaluate_cases --list --suite main
+uv run python -m scripts.evaluate_cases --case free-monthend --version coach-v1
+
+# 先在 Lab 保存 candidate 版本。每个有效用例、每个版本各调用一次 DeepSeek。
+uv run python -m scripts.evaluate_cases --case free-monthend --case weekends \
+  --version coach-v1 --version candidate --provider deepseek > data/comparison.json
+```
+
+程序也可以用 `GET /lab/cases` 取清单，再调用 `POST /lab/cases/{id}/run`。请求体含 `options` 和可选草稿 `promptText`，与人工入口共用执行器。每条用例使用自身的模拟权益；真实调用的费用进入 Lab 的开支统计。
+
+```json
+{"options":{"provider":"deepseek","promptVersion":"coach-v1"}}
+```
+
+CLI 将各版本的结果按用例并排输出为 JSON。每条包含 `verdict`、`issues`、`runID`；有调用记录时可用 `GET /lab/runs/{runID}` 取实际消息、原始输出、过滤原因和 token。自动评分会检查两组输出、被过滤的条目、任务参数，以及用例要求的分组、日期或循环命中。每日总负担、同义重复和语言自然度按 `review` 单独判断。
+
+- `passed` / `failed` 表示真实模型的自动断言结果。用例要求双空组时，模型可以通过，同时服务会报告 `no_valid_tasks`。
+- `mock` 表示仅使用固定模拟输出。三个日期非法的用例预期得到 `expected_input_rejection`，在发送模型请求前结束。这两类都单独计数。
+- CLI 退出码 0 表示所选检查完成，1 表示出现断言或输入预期失败，2 表示配置或执行错误。遇到上游或连接错误时输出已完成部分并停止。每个版本都有独立调用，结果可能有采样波动。
+
 ## AI 开支
 
 打开 [AI 开支](http://127.0.0.1:8765/costs)，按模型配置当前适用的人民币单价：缓存命中输入、缓存未命中输入和输出，单位均为元 / 百万 tokens。单价可填字符串小数，服务使用 Decimal 计算并以字符串返回金额。配置及费用记录保存在被 Git 忽略的 `data/lab.sqlite3`。

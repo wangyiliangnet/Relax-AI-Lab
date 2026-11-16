@@ -277,6 +277,15 @@ uv run python -m relax_ai_lab --host 0.0.0.0 --port 8765</pre>
             >未打开会话</span
           >
         </div>
+        <details class="box small-details">
+          <summary>用固定用例验证当前 Prompt</summary>
+          <label for="evalCase">评测用例</label>
+          <select id="evalCase" disabled><option value="">选择用例</option></select>
+          <p id="caseReview" class="hint"></p>
+          <details id="caseInput" hidden><summary>固定输入、权益与自动断言</summary><div id="caseInputJson"></div></details>
+          <button id="runCase" class="secondary" disabled>运行所选用例</button>
+          <div id="caseOutcome" aria-live="polite"></div>
+        </details>
         <div class="simulation-grid">
           <aside class="box goal-card">
             <div class="box-heading">
@@ -465,6 +474,7 @@ uv run python -m relax_ai_lab --host 0.0.0.0 --port 8765</pre>
             ><select id="historySource">
               <option value="all">全部来源</option>
               <option value="browser">Web</option>
+              <option value="agent">Agent</option>
               <option value="ios">iOS</option>
             </select>
           </div>

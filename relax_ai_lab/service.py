@@ -75,11 +75,14 @@ class Lab:
         except (FileNotFoundError, ValueError) as exc:
             raise LabError("unknown_prompt", "所选 prompt 版本不存在。", 422) from exc
 
-    async def generate(self, request: GenerationRequest, options=None, prompt_text=None, source="ios"):
+    async def generate(
+        self, request: GenerationRequest, options=None, prompt_text=None, source="ios", *, case=None
+    ):
         if self.lock.locked():
             raise LabError("busy", "本地实验服务每次执行一个生成请求，请稍后手动重试。", 409)
         async with self.lock:
-            profile = self.store.profile()
+            # A fixture owns its simulated entitlement. Browser/iOS sessions share the normal ledger.
+            profile = self.store.profile() if case is None else Profile(isPro=case["isPro"])
             options = options or profile.options
             preview = self.preview(request, options, prompt_text, profile)
             started = time.monotonic()
@@ -100,6 +103,8 @@ class Lab:
                 "feedback": None,
                 "providerAttempted": False,
             }
+            if case is not None:
+                run["case"] = case
             run["pricing"] = select_pricing(
                 run["options"], run["createdAt"], self.store.pricing(), self.settings.base_url
             )
@@ -130,7 +135,8 @@ class Lab:
                 profile = profile.model_copy(
                     update={"usedCredits": profile.usedCredits + profile.creditsPerGeneration}
                 )
-                self.store.save_profile(profile)
+                if case is None:
+                    self.store.save_profile(profile)
                 run.update(
                     status="success", result=result.model_dump(), entitlementAfter=self.entitlement(profile)
                 )

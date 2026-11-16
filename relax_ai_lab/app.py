@@ -8,9 +8,10 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import Field
 
+from .cases import execute_case, load_cases
 from .config import ROOT, Settings
 from .costs import PricingDeletion, PricingRule, pricing_schedule
-from .models import Contract, Experiment, GenerationRequest, Profile, PromptVersion
+from .models import CaseExecution, Contract, Experiment, GenerationRequest, Profile, PromptVersion
 from .network import connection_info
 from .provider import LabError
 from .service import Lab
@@ -22,6 +23,7 @@ class Feedback(Contract):
 
 
 def create_app(settings: Settings | None = None, provider=None):
+    catalog = load_cases()
     lab = Lab(settings or Settings.from_env(), provider)
     app = FastAPI(title="Relax AI Lab", version="0.1.0", description="本地联调服务；所有会员和积分均为模拟。")
     app.state.lab = lab
@@ -171,6 +173,17 @@ def create_app(settings: Settings | None = None, provider=None):
     @app.get("/lab/examples", tags=["Lab"])
     async def examples():
         return json.loads((ROOT / "examples" / "goals.json").read_text())
+
+    @app.get("/lab/cases", tags=["Lab"])
+    async def cases():
+        return list(catalog.values())
+
+    @app.post("/lab/cases/{case_id}/run", tags=["Lab"])
+    async def run_case(case_id: str, selection: CaseExecution):
+        case = catalog.get(case_id)
+        if case is None:
+            raise LabError("unknown_case", "用例不存在。", 404)
+        return await execute_case(lab, case, selection)
 
     @app.get("/contracts/{name}", tags=["Contracts"])
     async def schema(name: str):

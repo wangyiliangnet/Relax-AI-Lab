@@ -9,7 +9,7 @@ from .provider import LabError
 
 
 def normalized_title(title):
-    return "".join(char for char in unicodedata.normalize("NFKC", title).casefold() if char.isalnum())
+    return unicodedata.normalize("NFC", title.strip().lower())
 
 
 def reject_constant(value):

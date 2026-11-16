@@ -12,6 +12,7 @@ const statuses = {
   running: "生成中",
 };
 const ratings = { good: "可用", needs_work: "需调整", bad: "不可用" };
+const sourceLabels = { ios: "iOS", browser: "Web", agent: "Agent" };
 const when = (value) =>
   new Date(value).toLocaleString("zh-CN", { hour12: false });
 export function createHistoryController({
@@ -20,6 +21,7 @@ export function createHistoryController({
   renderIssues,
   renderMetrics,
   renderTrace,
+  formatCaseVerdict,
   notify,
   onFeedback,
 }) {
@@ -153,9 +155,7 @@ export function createHistoryController({
           "span",
           run.feedback
             ? ratings[run.feedback.rating] || run.feedback.rating
-            : run.source === "ios"
-              ? "iOS"
-              : "Web",
+            : sourceLabels[run.source] || run.source,
           "hint",
         ),
       );
@@ -263,7 +263,7 @@ export function createHistoryController({
     target.append(
       node(
         "p",
-        `${when(run.createdAt)} · ${run.source === "ios" ? "iOS" : "Web"} · ${run.options.promptVersion}`,
+        `${when(run.createdAt)} · ${sourceLabels[run.source] || run.source} · ${run.options.promptVersion}`,
         "hint",
       ),
     );
@@ -351,6 +351,12 @@ export function createHistoryController({
         JSON.stringify(records[1].effectiveRequest)
       )
         differences.push("请求上下文不同");
+      if (records[0].entitlementBefore?.isPro !== records[1].entitlementBefore?.isPro)
+        differences.push("模拟会员身份不同");
+      if (["provider", "model", "temperature", "maxTokens"].some(
+        (key) => records[0].options[key] !== records[1].options[key],
+      ))
+        differences.push("模型或采样参数不同");
       if (differences.length)
         $("comparison").append(
           node("p", differences.join(" · "), "comparison-context"),
@@ -373,6 +379,7 @@ export function createHistoryController({
         const metrics = node("div", null, "metrics");
         renderMetrics(metrics, run);
         column.append(metrics);
+        if (run.caseEvaluation) column.append(node("p", formatCaseVerdict(run.caseEvaluation)));
         if (run.feedback)
           column.append(
             node(

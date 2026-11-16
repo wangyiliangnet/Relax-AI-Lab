@@ -39,12 +39,13 @@
           "type": "number"
         },
         "dailyTarget": {
-          "minimum": 0,
+          "description": "Signed daily threshold, preserved at one decimal place.",
+          "multipleOf": 0.1,
           "title": "Dailytarget",
           "type": "number"
         },
         "unit": {
-          "maxLength": 12,
+          "description": "At most 12 extended grapheme clusters (Swift Characters).",
           "title": "Unit",
           "type": "string"
         },
@@ -168,7 +169,6 @@
       "additionalProperties": false,
       "properties": {
         "title": {
-          "maxLength": 500,
           "minLength": 1,
           "title": "Title",
           "type": "string"
@@ -176,7 +176,6 @@
         "note": {
           "anyOf": [
             {
-              "maxLength": 10000,
               "type": "string"
             },
             {
